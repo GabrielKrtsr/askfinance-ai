@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
+import { Toaster } from "sonner";
 import "./globals.css";
 
 const geistSans = localFont({
@@ -14,9 +15,9 @@ const geistMono = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "AskFinance AI — Le copilote financier des pros et des particuliers",
+  title: "AskFinance AI — Le copilote IA de vos finances personnelles",
   description:
-    "PME comme particuliers : importez vos relevés, visualisez vos dépenses et discutez avec votre copilote IA. La gestion financière, enfin claire.",
+    "Importez vos relevés, visualisez vos dépenses et discutez avec votre copilote IA. Vos finances personnelles, enfin claires.",
 };
 
 export default function RootLayout({
@@ -30,6 +31,7 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased`}
       >
         {children}
+        <Toaster richColors position="top-right" />
       </body>
     </html>
   );

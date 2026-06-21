@@ -1,9 +1,27 @@
-import { DashboardShell } from "@/components/dashboard/dashboard-shell";
+import { redirect } from "next/navigation";
 
-export default function DashboardLayout({
+import { DashboardShell } from "@/components/dashboard/dashboard-shell";
+import { getProfile } from "@/lib/data/dashboard";
+
+export default async function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  return <DashboardShell>{children}</DashboardShell>;
+  const profile = await getProfile();
+
+  // Pas connecté → on renvoie vers la page de connexion.
+  if (!profile) redirect("/login");
+
+  return (
+    <DashboardShell
+      user={{
+        fullName: profile.fullName,
+        initials: profile.initials,
+        email: profile.email,
+      }}
+    >
+      {children}
+    </DashboardShell>
+  );
 }

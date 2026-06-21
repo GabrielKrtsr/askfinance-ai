@@ -25,7 +25,7 @@ const features = [
   {
     icon: BarChart3,
     title: "Tableaux de bord clairs",
-    desc: "Trésorerie, dépenses par catégorie, marges — tout est visualisé en temps réel.",
+    desc: "Solde, dépenses par catégorie, taux d'épargne — tout est visualisé en temps réel.",
   },
   {
     icon: Bot,
@@ -45,16 +45,16 @@ const features = [
   {
     icon: Sparkles,
     title: "Prévisions",
-    desc: "Anticipez votre trésorerie à 3 mois grâce aux modèles prédictifs.",
+    desc: "Anticipez votre budget à 3 mois grâce aux modèles prédictifs.",
   },
 ];
 
 const plans = [
   {
-    name: "Starter",
+    name: "Gratuit",
     price: "0",
     cadence: "/mois",
-    desc: "Pour tester AskFinance AI sur un compte.",
+    desc: "Pour suivre vos comptes sans payer.",
     cta: "Commencer gratuitement",
     highlighted: false,
     features: [
@@ -65,10 +65,10 @@ const plans = [
     ],
   },
   {
-    name: "Pro",
-    price: "29",
+    name: "Premium",
+    price: "9",
     cadence: "/mois",
-    desc: "Pour les pros et particuliers qui veulent piloter finement.",
+    desc: "Pour gérer votre argent au quotidien.",
     cta: "Démarrer l'essai",
     highlighted: true,
     features: [
@@ -79,41 +79,34 @@ const plans = [
       "Historique illimité",
     ],
   },
-  {
-    name: "Entreprise",
-    price: "Sur devis",
-    cadence: "",
-    desc: "Pour les groupes multi-entités.",
-    cta: "Nous contacter",
-    highlighted: false,
-    features: [
-      "Tout le plan Pro",
-      "Multi-entités consolidées",
-      "Accès & rôles avancés",
-      "Accompagnement dédié",
-    ],
-  },
 ];
 
 const testimonials = [
   {
     quote:
-      "On a divisé par trois le temps passé sur notre clôture mensuelle. Le copilote répond en quelques secondes à des questions qui nous prenaient des heures.",
-    name: "Léa Fontaine",
-    role: "DAF, Studio Marbre",
-  },
-  {
-    quote:
-      "Je vois enfin clair dans mon budget perso. Importer mes relevés bancaires m'a pris deux minutes, et le copilote répond à toutes mes questions.",
+      "Je vois enfin clair dans mon budget. Importer mes relevés m'a pris deux minutes, et le copilote répond à toutes mes questions.",
     name: "Karim Benali",
     role: "Particulier, Lyon",
   },
   {
     quote:
-      "Les alertes budgétaires nous ont évité deux dépassements ce trimestre. Indispensable.",
-    name: "Sophie Renaud",
-    role: "Cofondatrice, Lefèvre & Cie",
+      "Le copilote a repéré trois abonnements que j'avais oubliés. J'économise une quarantaine d'euros par mois sans avoir rien fait.",
+    name: "Camille Moreau",
+    role: "Particulier, Lille",
   },
+  {
+    quote:
+      "Les alertes de budget m'évitent les mauvaises surprises en fin de mois. Je sais toujours où j'en suis.",
+    name: "Sophie Renaud",
+    role: "Particulier, Bordeaux",
+  },
+];
+
+const trust = [
+  "Chiffrement de bout en bout",
+  "Données hébergées en France",
+  "Sans engagement",
+  "Vos données jamais revendues",
 ];
 
 export default function LandingPage() {
@@ -132,12 +125,12 @@ export default function LandingPage() {
                 Nouveau · Copilote financier par IA
               </Badge>
               <h1 className="text-balance text-4xl font-bold tracking-tight text-foreground sm:text-6xl">
-                Le copilote financier des pros et des particuliers
+                Vos finances personnelles, enfin claires
               </h1>
               <p className="mx-auto mt-6 max-w-2xl text-balance text-lg text-muted-foreground">
                 Importez vos relevés, visualisez vos dépenses et discutez avec
-                une IA qui comprend vos finances. La gestion financière, enfin
-                claire.
+                une IA qui comprend votre argent. La gestion de budget, enfin
+                simple.
               </p>
               <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
                 <Button size="lg" asChild>
@@ -169,9 +162,9 @@ export default function LandingPage() {
                   </div>
                   <div className="grid gap-4 p-6 sm:grid-cols-3">
                     {[
-                      { l: "Trésorerie", v: "48 250 €", c: "text-foreground" },
-                      { l: "Dépenses", v: "18 940 €", c: "text-foreground" },
-                      { l: "Marge nette", v: "39,3 %", c: "text-teal" },
+                      { l: "Solde total", v: "4 280 €", c: "text-foreground" },
+                      { l: "Dépenses", v: "1 940 €", c: "text-foreground" },
+                      { l: "Taux d'épargne", v: "32 %", c: "text-teal" },
                     ].map((s) => (
                       <div
                         key={s.l}
@@ -201,18 +194,19 @@ export default function LandingPage() {
           </div>
         </section>
 
-        {/* Logos / preuve sociale */}
+        {/* Confiance / vie privée */}
         <section className="border-y bg-muted/30 py-10">
           <div className="mx-auto max-w-6xl px-4 sm:px-6">
             <p className="text-center text-sm font-medium uppercase tracking-wider text-muted-foreground">
-              Ils pilotent leurs finances avec AskFinance AI
+              Conçu pour protéger votre argent et votre vie privée
             </p>
-            <div className="mt-6 flex flex-wrap items-center justify-center gap-x-12 gap-y-4 text-lg font-semibold text-muted-foreground/70">
-              <span>Studio Marbre</span>
-              <span>Atelier Caron</span>
-              <span>Lefèvre &amp; Cie</span>
-              <span>Maison Pichard</span>
-              <span>Groupe Renaud</span>
+            <div className="mt-6 flex flex-wrap items-center justify-center gap-x-10 gap-y-4 text-sm font-semibold text-muted-foreground/80">
+              {trust.map((t) => (
+                <span key={t} className="flex items-center gap-2">
+                  <Check className="h-4 w-4 text-teal" />
+                  {t}
+                </span>
+              ))}
             </div>
           </div>
         </section>
@@ -222,11 +216,11 @@ export default function LandingPage() {
           <div className="mx-auto max-w-6xl px-4 sm:px-6">
             <div className="mx-auto max-w-2xl text-center">
               <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
-                Tout ce qu'il faut pour piloter vos finances
+                Tout ce qu'il faut pour gérer votre argent
               </h2>
               <p className="mt-4 text-lg text-muted-foreground">
-                Une plateforme unique, pensée aussi bien pour les particuliers
-                que pour les dirigeants et les équipes finance des PME.
+                Une application simple, pensée pour suivre votre budget au
+                quotidien.
               </p>
             </div>
             <div className="mt-14 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
@@ -251,7 +245,7 @@ export default function LandingPage() {
           <div className="mx-auto max-w-6xl px-4 sm:px-6">
             <div className="mx-auto max-w-2xl text-center">
               <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
-                Adopté par les pros et les particuliers exigeants
+                Adopté par des milliers de particuliers
               </h2>
             </div>
             <div className="mt-14 grid gap-6 lg:grid-cols-3">
@@ -286,10 +280,10 @@ export default function LandingPage() {
                 Des tarifs simples et transparents
               </h2>
               <p className="mt-4 text-lg text-muted-foreground">
-                Commencez gratuitement, évoluez quand vous êtes prêt.
+                Commencez gratuitement, passez au Premium quand vous êtes prêt.
               </p>
             </div>
-            <div className="mt-14 grid items-start gap-6 lg:grid-cols-3">
+            <div className="mx-auto mt-14 grid max-w-3xl items-start gap-6 lg:grid-cols-2">
               {plans.map((plan) => (
                 <Card
                   key={plan.name}
@@ -311,9 +305,7 @@ export default function LandingPage() {
                     </p>
                     <div className="mt-5 flex items-baseline gap-1">
                       <span className="text-4xl font-bold tracking-tight">
-                        {plan.price === "Sur devis"
-                          ? plan.price
-                          : `${plan.price} €`}
+                        {`${plan.price} €`}
                       </span>
                       <span className="text-sm text-muted-foreground">
                         {plan.cadence}
@@ -349,11 +341,11 @@ export default function LandingPage() {
           <div className="mx-auto max-w-6xl px-4 sm:px-6">
             <div className="overflow-hidden rounded-3xl bg-gradient-to-br from-primary to-teal px-6 py-16 text-center shadow-xl sm:px-16">
               <h2 className="text-balance text-3xl font-bold tracking-tight text-white sm:text-4xl">
-                Reprenez le contrôle de vos finances
+                Reprenez le contrôle de votre argent
               </h2>
               <p className="mx-auto mt-4 max-w-xl text-balance text-white/85">
-                Rejoignez des milliers de pros et de particuliers qui pilotent
-                leurs finances avec sérénité.
+                Rejoignez des milliers de particuliers qui gèrent leur budget
+                avec sérénité.
               </p>
               <div className="mt-8 flex justify-center">
                 <Button size="lg" variant="secondary" asChild>
@@ -375,7 +367,7 @@ export default function LandingPage() {
             <div className="max-w-xs">
               <Logo />
               <p className="mt-4 text-sm text-muted-foreground">
-                Le copilote financier des pros et des particuliers.
+                Le copilote IA de vos finances personnelles.
               </p>
             </div>
             <div className="grid grid-cols-2 gap-8 sm:grid-cols-3">
@@ -385,7 +377,7 @@ export default function LandingPage() {
                   links: ["Fonctionnalités", "Tarifs", "Sécurité"],
                 },
                 {
-                  title: "Entreprise",
+                  title: "Société",
                   links: ["À propos", "Blog", "Carrières"],
                 },
                 { title: "Légal", links: ["CGU", "Confidentialité", "RGPD"] },

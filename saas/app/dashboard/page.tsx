@@ -1,19 +1,7 @@
 import Link from "next/link";
-import {
-  ArrowDownRight,
-  ArrowUpRight,
-  Download,
-  Plus,
-  Sparkles,
-} from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, Download, Sparkles } from "lucide-react";
 
-import {
-  budgets,
-  company,
-  formatEUR,
-  kpis,
-  transactions,
-} from "@/lib/mock-data";
+import { getDashboardData, getProfile } from "@/lib/data/dashboard";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -23,13 +11,34 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
 import { CashflowChart } from "@/components/dashboard/cashflow-chart";
 import { CategoryChart } from "@/components/dashboard/category-chart";
-import { cn } from "@/lib/utils";
+import { ImportButton } from "@/components/dashboard/import-button";
+import { BudgetManager } from "@/components/dashboard/budget-manager";
+import { MonthSelect } from "@/components/dashboard/month-select";
+import { cn, formatEUR } from "@/lib/utils";
 
-export default function DashboardPage() {
-  const recent = transactions.slice(0, 6);
+function EmptyState({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex h-[200px] items-center justify-center text-center text-sm text-muted-foreground">
+      <p>{children}</p>
+    </div>
+  );
+}
+
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: { month?: string };
+}) {
+  const [profile, data] = await Promise.all([
+    getProfile(),
+    getDashboardData(searchParams.month),
+  ]);
+  const firstName = profile?.firstName || profile?.fullName || "";
+  const monthLabel = data.months.find(
+    (m) => m.value === data.selectedMonth
+  )?.label;
 
   return (
     <div className="space-y-6">
@@ -37,27 +46,28 @@ export default function DashboardPage() {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">
-            Bonjour, {company.user.name.split(" ")[0]} 👋
+            Bonjour{firstName ? `, ${firstName}` : ""} 👋
           </h1>
           <p className="text-sm text-muted-foreground">
-            Voici l'état de vos finances pour juin 2026.
+            Voici l'état de vos finances
+            {monthLabel ? ` — ${monthLabel}` : ""}.
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {data.months.length > 0 && (
+            <MonthSelect months={data.months} selected={data.selectedMonth} />
+          )}
           <Button variant="outline" size="sm">
             <Download className="h-4 w-4" />
             Exporter
           </Button>
-          <Button size="sm">
-            <Plus className="h-4 w-4" />
-            Importer un relevé
-          </Button>
+          <ImportButton />
         </div>
       </div>
 
       {/* KPIs */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {kpis.map((kpi) => (
+        {data.kpis.map((kpi) => (
           <Card key={kpi.label}>
             <CardContent className="p-5">
               <p className="text-sm text-muted-foreground">{kpi.label}</p>
@@ -65,20 +75,26 @@ export default function DashboardPage() {
                 {kpi.value}
               </p>
               <div className="mt-2 flex items-center gap-1.5 text-xs">
-                <span
-                  className={cn(
-                    "inline-flex items-center gap-0.5 font-medium",
-                    kpi.trend === "up" ? "text-emerald-600" : "text-red-500"
-                  )}
-                >
-                  {kpi.trend === "up" ? (
-                    <ArrowUpRight className="h-3.5 w-3.5" />
-                  ) : (
-                    <ArrowDownRight className="h-3.5 w-3.5" />
-                  )}
-                  {kpi.delta}
-                </span>
-                <span className="text-muted-foreground">{kpi.hint}</span>
+                {kpi.delta !== "—" ? (
+                  <>
+                    <span
+                      className={cn(
+                        "inline-flex items-center gap-0.5 font-medium",
+                        kpi.positive ? "text-emerald-600" : "text-red-500"
+                      )}
+                    >
+                      {kpi.trend === "up" ? (
+                        <ArrowUpRight className="h-3.5 w-3.5" />
+                      ) : (
+                        <ArrowDownRight className="h-3.5 w-3.5" />
+                      )}
+                      {kpi.delta}
+                    </span>
+                    <span className="text-muted-foreground">{kpi.hint}</span>
+                  </>
+                ) : (
+                  <span className="text-muted-foreground">—</span>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -86,12 +102,12 @@ export default function DashboardPage() {
       </div>
 
       {/* Graphiques */}
-      <div className="grid gap-4 lg:grid-cols-3">
-        <Card className="lg:col-span-2">
+      <div className="grid gap-4 lg:grid-cols-5">
+        <Card className="lg:col-span-3">
           <CardHeader className="flex-row items-center justify-between space-y-0">
             <div>
-              <CardTitle>Flux de trésorerie</CardTitle>
-              <CardDescription>Revenus vs dépenses · 12 mois</CardDescription>
+              <CardTitle>Revenus &amp; dépenses</CardTitle>
+              <CardDescription>Sur les 12 derniers mois</CardDescription>
             </div>
             <div className="flex items-center gap-4 text-xs">
               <span className="flex items-center gap-1.5">
@@ -105,58 +121,37 @@ export default function DashboardPage() {
             </div>
           </CardHeader>
           <CardContent>
-            <CashflowChart />
+            {data.cashflow.length > 0 ? (
+              <CashflowChart data={data.cashflow} />
+            ) : (
+              <EmptyState>
+                Aucune donnée à afficher. Importez un relevé pour voir vos flux.
+              </EmptyState>
+            )}
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="lg:col-span-2">
           <CardHeader>
             <CardTitle>Dépenses par catégorie</CardTitle>
-            <CardDescription>Juin 2026</CardDescription>
+            <CardDescription>{monthLabel ?? "Mois en cours"}</CardDescription>
           </CardHeader>
           <CardContent>
-            <CategoryChart />
+            {data.categories.length > 0 ? (
+              <CategoryChart data={data.categories} />
+            ) : (
+              <EmptyState>Aucune dépense ce mois-ci.</EmptyState>
+            )}
           </CardContent>
         </Card>
       </div>
 
       {/* Budgets + Copilote */}
       <div className="grid gap-4 lg:grid-cols-3">
-        <Card className="lg:col-span-2">
-          <CardHeader>
-            <CardTitle>Suivi budgétaire</CardTitle>
-            <CardDescription>
-              Dépenses par rapport aux budgets fixés
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-5">
-            {budgets.map((b) => {
-              const pct = Math.round((b.depense / b.budget) * 100);
-              const over = b.depense > b.budget;
-              return (
-                <div key={b.categorie}>
-                  <div className="mb-1.5 flex items-center justify-between text-sm">
-                    <span className="font-medium">{b.categorie}</span>
-                    <span
-                      className={cn(
-                        "tabular-nums",
-                        over ? "text-red-500" : "text-muted-foreground"
-                      )}
-                    >
-                      {formatEUR(b.depense)} / {formatEUR(b.budget)}
-                    </span>
-                  </div>
-                  <Progress
-                    value={Math.min(pct, 100)}
-                    indicatorClassName={cn(
-                      over ? "bg-red-500" : "bg-teal"
-                    )}
-                  />
-                </div>
-              );
-            })}
-          </CardContent>
-        </Card>
+        <BudgetManager
+          budgets={data.budgets}
+          categories={data.availableCategories}
+        />
 
         <Card className="flex flex-col bg-gradient-to-br from-primary to-teal text-white">
           <CardHeader>
@@ -168,14 +163,9 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent className="flex flex-1 flex-col justify-end">
             <p className="text-sm text-white/90">
-              « Vos dépenses Marketing dépassent de 12 % le budget prévu ce
-              mois-ci. »
+              Posez vos questions et obtenez des analyses sur mesure.
             </p>
-            <Button
-              asChild
-              variant="secondary"
-              className="mt-4 w-full"
-            >
+            <Button asChild variant="secondary" className="mt-4 w-full">
               <Link href="/dashboard/chat">Ouvrir le copilote</Link>
             </Button>
           </CardContent>
@@ -194,45 +184,51 @@ export default function DashboardPage() {
           </Button>
         </CardHeader>
         <CardContent className="p-0">
-          <ul className="divide-y">
-            {recent.map((t) => (
-              <li
-                key={t.id}
-                className="flex items-center gap-4 px-6 py-3.5 transition-colors hover:bg-muted/40"
-              >
-                <span
-                  className={cn(
-                    "flex h-9 w-9 shrink-0 items-center justify-center rounded-full",
-                    t.type === "credit"
-                      ? "bg-emerald-50 text-emerald-600"
-                      : "bg-muted text-muted-foreground"
-                  )}
+          {data.recent.length > 0 ? (
+            <ul className="divide-y">
+              {data.recent.map((t) => (
+                <li
+                  key={t.id}
+                  className="flex items-center gap-4 px-6 py-3.5 transition-colors hover:bg-muted/40"
                 >
-                  {t.type === "credit" ? (
-                    <ArrowDownRight className="h-4 w-4" />
-                  ) : (
-                    <ArrowUpRight className="h-4 w-4" />
-                  )}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium">{t.merchant}</p>
-                  <p className="text-xs text-muted-foreground">{t.date}</p>
-                </div>
-                <Badge variant="muted" className="hidden sm:inline-flex">
-                  {t.category}
-                </Badge>
-                <span
-                  className={cn(
-                    "w-24 text-right text-sm font-semibold tabular-nums",
-                    t.type === "credit" ? "text-emerald-600" : "text-foreground"
-                  )}
-                >
-                  {t.type === "credit" ? "+" : ""}
-                  {formatEUR(t.amount)}
-                </span>
-              </li>
-            ))}
-          </ul>
+                  <span
+                    className={cn(
+                      "flex h-9 w-9 shrink-0 items-center justify-center rounded-full",
+                      t.type === "credit"
+                        ? "bg-emerald-50 text-emerald-600"
+                        : "bg-muted text-muted-foreground"
+                    )}
+                  >
+                    {t.type === "credit" ? (
+                      <ArrowDownRight className="h-4 w-4" />
+                    ) : (
+                      <ArrowUpRight className="h-4 w-4" />
+                    )}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium">{t.merchant}</p>
+                    <p className="text-xs text-muted-foreground">{t.dateLabel}</p>
+                  </div>
+                  <Badge variant="muted" className="hidden sm:inline-flex">
+                    {t.category}
+                  </Badge>
+                  <span
+                    className={cn(
+                      "w-24 text-right text-sm font-semibold tabular-nums",
+                      t.type === "credit" ? "text-emerald-600" : "text-foreground"
+                    )}
+                  >
+                    {t.type === "credit" ? "+" : ""}
+                    {formatEUR(t.amount)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="px-6 py-10 text-center text-sm text-muted-foreground">
+              Aucune transaction. Importez un relevé pour commencer.
+            </p>
+          )}
         </CardContent>
       </Card>
     </div>

@@ -14,7 +14,7 @@ import { cn } from "@/lib/utils";
 
 // Réponse pré-écrite (aucune API) renvoyée pour toute nouvelle question.
 const CANNED_REPLY =
-  "D'après vos données de juin 2026 : vos dépenses s'élèvent à 18 940 € pour 31 200 € de revenus, soit une marge nette de 39,3 %. Le poste le plus dynamique reste les Salaires (8 200 €). Souhaitez-vous que je détaille une catégorie en particulier ?";
+  "D'après vos données : vos dépenses du mois s'élèvent à 1 940 € pour 2 850 € de revenus, soit un taux d'épargne de 32 %. Votre plus gros poste reste l'Alimentation (420 €). Voulez-vous que je détaille une catégorie ?";
 
 function Bubble({ message }: { message: ChatMessage }) {
   const isUser = message.role === "user";

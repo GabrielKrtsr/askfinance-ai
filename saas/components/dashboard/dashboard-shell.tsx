@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   Bell,
   CreditCard,
@@ -19,8 +19,14 @@ import {
 } from "lucide-react";
 
 import { Logo } from "@/components/logo";
-import { company } from "@/lib/mock-data";
+import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
+
+export interface DashboardUser {
+  fullName: string;
+  initials: string;
+  email: string;
+}
 
 const nav = [
   { label: "Tableau de bord", href: "/dashboard", icon: LayoutDashboard },
@@ -34,8 +40,21 @@ const secondaryNav = [
   { label: "Aide", href: "#", icon: LifeBuoy },
 ];
 
-function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
+function SidebarContent({
+  user,
+  onNavigate,
+}: {
+  user: DashboardUser;
+  onNavigate?: () => void;
+}) {
   const pathname = usePathname();
+  const router = useRouter();
+
+  async function handleSignOut() {
+    const supabase = createClient();
+    await supabase.auth.signOut();
+    router.push("/login");
+  }
 
   return (
     <div className="flex h-full flex-col bg-sidebar text-sidebar-foreground">
@@ -90,7 +109,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
       <div className="px-3 pb-3">
         <div className="rounded-xl bg-gradient-to-br from-primary to-teal p-4">
           <Sparkles className="h-5 w-5 text-white" />
-          <p className="mt-2 text-sm font-semibold text-white">Plan {company.plan}</p>
+          <p className="mt-2 text-sm font-semibold text-white">Plan Pro</p>
           <p className="mt-0.5 text-xs text-white/80">
             Copilote IA et prévisions activés.
           </p>
@@ -101,37 +120,41 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
       <div className="border-t border-sidebar-border p-3">
         <div className="flex items-center gap-3 rounded-lg px-2 py-2">
           <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-primary to-teal text-sm font-semibold text-white">
-            {company.user.initials}
+            {user.initials}
           </div>
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-medium text-white">
-              {company.user.name}
+              {user.fullName}
             </p>
-            <p className="truncate text-xs text-sidebar-muted">
-              {company.name}
-            </p>
+            <p className="truncate text-xs text-sidebar-muted">{user.email}</p>
           </div>
-          <Link
-            href="/login"
+          <button
+            onClick={handleSignOut}
             className="text-sidebar-muted hover:text-white"
             aria-label="Se déconnecter"
           >
             <LogOut className="h-4 w-4" />
-          </Link>
+          </button>
         </div>
       </div>
     </div>
   );
 }
 
-export function DashboardShell({ children }: { children: React.ReactNode }) {
+export function DashboardShell({
+  user,
+  children,
+}: {
+  user: DashboardUser;
+  children: React.ReactNode;
+}) {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   return (
     <div className="min-h-screen bg-muted/30">
       {/* Sidebar — desktop */}
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 border-r border-sidebar-border lg:block">
-        <SidebarContent />
+        <SidebarContent user={user} />
       </aside>
 
       {/* Drawer — mobile */}
@@ -149,7 +172,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
             >
               <X className="h-6 w-6" />
             </button>
-            <SidebarContent onNavigate={() => setMobileOpen(false)} />
+            <SidebarContent user={user} onNavigate={() => setMobileOpen(false)} />
           </div>
         </div>
       )}
@@ -183,7 +206,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
               <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-teal ring-2 ring-background" />
             </button>
             <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-primary to-teal text-sm font-semibold text-white">
-              {company.user.initials}
+              {user.initials}
             </div>
           </div>
         </header>

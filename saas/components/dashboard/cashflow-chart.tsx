@@ -10,13 +10,17 @@ import {
   YAxis,
 } from "recharts";
 
-import { cashflow, formatEUR } from "@/lib/mock-data";
+import { formatEUR } from "@/lib/utils";
 
-export function CashflowChart() {
+interface CashflowChartProps {
+  data: { mois: string; revenus: number; depenses: number }[];
+}
+
+export function CashflowChart({ data }: CashflowChartProps) {
   return (
     <ResponsiveContainer width="100%" height={300}>
       <AreaChart
-        data={cashflow}
+        data={data}
         margin={{ top: 10, right: 8, left: -8, bottom: 0 }}
       >
         <defs>

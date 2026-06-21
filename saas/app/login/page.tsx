@@ -1,10 +1,44 @@
+"use client";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { AuthShell } from "@/components/auth/auth-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { AuthShell } from "@/components/auth/auth-shell";
+import { createClient } from "@/lib/supabase/client";
 
 export default function LoginPage() {
+  const router = useRouter();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
+
+    const supabase = createClient();
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+
+    if (error) {
+      setError("E-mail ou mot de passe incorrect.");
+      setLoading(false);
+    } else {
+      router.push("/dashboard");
+    }
+  }
+
+  async function handleGoogle() {
+    const supabase = createClient();
+    await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo: `${location.origin}/auth/callback` },
+    });
+  }
+
   return (
     <AuthShell>
       <div className="animate-fade-in">
@@ -13,42 +47,31 @@ export default function LoginPage() {
           Connectez-vous pour accéder à votre tableau de bord.
         </p>
 
-        {/* Formulaire statique — aucune logique de soumission */}
-        <form className="mt-8 space-y-4">
+        <form className="mt-8 space-y-4" onSubmit={handleSubmit}>
           <div className="space-y-2">
             <Label htmlFor="email">Adresse e-mail</Label>
             <Input
               id="email"
               type="email"
-              placeholder="vous@entreprise.fr"
-              defaultValue="camille.moreau@atelierdupont.fr"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
             />
           </div>
+
           <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <Label htmlFor="password">Mot de passe</Label>
-              <Link
-                href="#"
-                className="text-xs font-medium text-primary hover:underline"
-              >
-                Mot de passe oublié ?
-              </Link>
-            </div>
-            <Input id="password" type="password" placeholder="••••••••" />
+            <Label htmlFor="password">Mot de passe</Label>
+            <Input
+              id="password"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
           </div>
 
-          <label className="flex items-center gap-2 text-sm text-muted-foreground">
-            <input
-              type="checkbox"
-              className="h-4 w-4 rounded border-input text-primary focus:ring-ring"
-              defaultChecked
-            />
-            Se souvenir de moi
-          </label>
+          {error && <p className="text-sm text-red-500">{error}</p>}
 
-          {/* Lien direct vers le dashboard (UI uniquement) */}
-          <Button asChild className="w-full" size="lg">
-            <Link href="/dashboard">Se connecter</Link>
+          <Button type="submit" className="w-full" size="lg" disabled={loading}>
+            {loading ? "Connexion…" : "Se connecter"}
           </Button>
         </form>
 
@@ -58,7 +81,13 @@ export default function LoginPage() {
           <div className="h-px flex-1 bg-border" />
         </div>
 
-        <Button variant="outline" className="w-full" size="lg">
+        <Button
+          variant="outline"
+          className="w-full"
+          size="lg"
+          type="button"
+          onClick={handleGoogle}
+        >
           <svg className="h-4 w-4" viewBox="0 0 24 24" aria-hidden="true">
             <path
               fill="#4285F4"

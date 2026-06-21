@@ -14,12 +14,12 @@ export function AuthShell({ children }: { children: React.ReactNode }) {
         <div className="relative max-w-md">
           <Quote className="h-8 w-8 text-teal" />
           <p className="mt-4 text-2xl font-semibold leading-snug">
-            « AskFinance AI a transformé notre façon de piloter la trésorerie. On a
-            enfin une vision claire, en temps réel. »
+            « AskFinance AI a transformé ma façon de gérer mon budget. J'ai
+            enfin une vision claire de mon argent, en temps réel. »
           </p>
           <div className="mt-6">
             <p className="font-medium">Léa Fontaine</p>
-            <p className="text-sm text-sidebar-muted">DAF, Studio Marbre</p>
+            <p className="text-sm text-sidebar-muted">Particulier, Paris</p>
           </div>
         </div>
         <div className="relative grid grid-cols-3 gap-4">
