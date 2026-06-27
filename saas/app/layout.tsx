@@ -15,9 +15,9 @@ const geistMono = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "AskFinance AI — Le copilote IA de vos finances personnelles",
+  title: "AskFinance AI — Votre copilote de trésorerie pour TPE et PME",
   description:
-    "Importez vos relevés, visualisez vos dépenses et discutez avec votre copilote IA. Vos finances personnelles, enfin claires.",
+    "Importez vos relevés, suivez vos dépenses et pilotez votre trésorerie avec votre copilote IA. Conçu pour les TPE et PME.",
 };
 
 export default function RootLayout({

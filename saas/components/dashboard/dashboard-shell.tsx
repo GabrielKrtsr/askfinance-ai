@@ -10,7 +10,6 @@ import {
   LifeBuoy,
   LogOut,
   Menu,
-  MessageSquareText,
   Receipt,
   Search,
   Settings,
@@ -19,6 +18,7 @@ import {
 } from "lucide-react";
 
 import { Logo } from "@/components/logo";
+import { FloatingAiChat } from "@/components/dashboard/floating-ai-chat";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 
@@ -31,7 +31,6 @@ export interface DashboardUser {
 const nav = [
   { label: "Tableau de bord", href: "/dashboard", icon: LayoutDashboard },
   { label: "Transactions", href: "/dashboard/transactions", icon: Receipt },
-  { label: "Copilote IA", href: "/dashboard/chat", icon: MessageSquareText },
 ];
 
 const secondaryNav = [
@@ -213,6 +212,7 @@ export function DashboardShell({
 
         <main className="px-4 py-6 sm:px-6 lg:px-8">{children}</main>
       </div>
+      <FloatingAiChat userInitials={user.initials} />
     </div>
   );
 }

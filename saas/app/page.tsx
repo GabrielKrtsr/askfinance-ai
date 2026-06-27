@@ -25,7 +25,7 @@ const features = [
   {
     icon: BarChart3,
     title: "Tableaux de bord clairs",
-    desc: "Solde, dépenses par catégorie, taux d'épargne — tout est visualisé en temps réel.",
+    desc: "Trésorerie, dépenses par catégorie, marges — tout est visualisé en temps réel.",
   },
   {
     icon: Bot,
@@ -45,38 +45,52 @@ const features = [
   {
     icon: Sparkles,
     title: "Prévisions",
-    desc: "Anticipez votre budget à 3 mois grâce aux modèles prédictifs.",
+    desc: "Anticipez votre trésorerie à 3 mois grâce aux modèles prédictifs.",
   },
 ];
 
 const plans = [
   {
-    name: "Gratuit",
-    price: "0",
-    cadence: "/mois",
-    desc: "Pour suivre vos comptes sans payer.",
-    cta: "Commencer gratuitement",
+    name: "Essentiel",
+    price: "49",
+    desc: "Pour les indépendants et les TPE.",
+    cta: "Démarrer l'essai",
     highlighted: false,
     features: [
-      "1 compte bancaire",
+      "1 société",
       "Import CSV illimité",
-      "Tableau de bord de base",
-      "30 jours d'historique",
+      "Tableau de bord trésorerie",
+      "Copilote IA — 50 questions/mois",
+      "Historique 12 mois",
+    ],
+  },
+  {
+    name: "Business",
+    price: "99",
+    desc: "Pour les PME en croissance.",
+    cta: "Démarrer l'essai",
+    highlighted: true,
+    features: [
+      "Comptes bancaires illimités",
+      "Copilote IA illimité",
+      "Budgets & alertes",
+      "Prévisions de trésorerie à 3 mois",
+      "Jusqu'à 5 utilisateurs",
+      "Historique illimité",
     ],
   },
   {
     name: "Premium",
-    price: "9",
-    cadence: "/mois",
-    desc: "Pour gérer votre argent au quotidien.",
-    cta: "Démarrer l'essai",
-    highlighted: true,
+    price: "199",
+    desc: "Pour les PME structurées et multi-sociétés.",
+    cta: "Nous contacter",
+    highlighted: false,
     features: [
-      "Comptes illimités",
-      "Copilote IA illimité",
-      "Budgets & alertes",
-      "Prévisions à 3 mois",
-      "Historique illimité",
+      "Tout le plan Business",
+      "Multi-sociétés consolidées",
+      "Rôles & accès avancés",
+      "Utilisateurs illimités",
+      "Accompagnement dédié",
     ],
   },
 ];
@@ -84,29 +98,22 @@ const plans = [
 const testimonials = [
   {
     quote:
-      "Je vois enfin clair dans mon budget. Importer mes relevés m'a pris deux minutes, et le copilote répond à toutes mes questions.",
+      "On a divisé par trois le temps passé sur notre clôture mensuelle. Le copilote répond en quelques secondes à des questions qui nous prenaient des heures.",
+    name: "Léa Fontaine",
+    role: "DAF, Studio Marbre",
+  },
+  {
+    quote:
+      "Je pilote enfin ma trésorerie en temps réel. Les alertes m'ont évité deux découverts ce trimestre.",
     name: "Karim Benali",
-    role: "Particulier, Lyon",
+    role: "Gérant, Benali & Fils",
   },
   {
     quote:
-      "Le copilote a repéré trois abonnements que j'avais oubliés. J'économise une quarantaine d'euros par mois sans avoir rien fait.",
-    name: "Camille Moreau",
-    role: "Particulier, Lille",
-  },
-  {
-    quote:
-      "Les alertes de budget m'évitent les mauvaises surprises en fin de mois. Je sais toujours où j'en suis.",
+      "Les prévisions à 3 mois nous aident à décider quand investir. Indispensable pour une PME comme la nôtre.",
     name: "Sophie Renaud",
-    role: "Particulier, Bordeaux",
+    role: "Cofondatrice, Lefèvre & Cie",
   },
-];
-
-const trust = [
-  "Chiffrement de bout en bout",
-  "Données hébergées en France",
-  "Sans engagement",
-  "Vos données jamais revendues",
 ];
 
 export default function LandingPage() {
@@ -122,15 +129,15 @@ export default function LandingPage() {
             <div className="mx-auto max-w-3xl text-center">
               <Badge variant="teal" className="mb-5">
                 <Sparkles className="mr-1 h-3 w-3" />
-                Nouveau · Copilote financier par IA
+                Nouveau · Copilote de trésorerie par IA
               </Badge>
               <h1 className="text-balance text-4xl font-bold tracking-tight text-foreground sm:text-6xl">
-                Vos finances personnelles, enfin claires
+                Votre copilote de trésorerie
               </h1>
               <p className="mx-auto mt-6 max-w-2xl text-balance text-lg text-muted-foreground">
-                Importez vos relevés, visualisez vos dépenses et discutez avec
-                une IA qui comprend votre argent. La gestion de budget, enfin
-                simple.
+                Importez vos relevés, suivez vos dépenses et pilotez la
+                trésorerie de votre entreprise avec une IA qui comprend vos
+                finances. Pensé pour les TPE et PME.
               </p>
               <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
                 <Button size="lg" asChild>
@@ -162,9 +169,9 @@ export default function LandingPage() {
                   </div>
                   <div className="grid gap-4 p-6 sm:grid-cols-3">
                     {[
-                      { l: "Solde total", v: "4 280 €", c: "text-foreground" },
-                      { l: "Dépenses", v: "1 940 €", c: "text-foreground" },
-                      { l: "Taux d'épargne", v: "32 %", c: "text-teal" },
+                      { l: "Trésorerie", v: "48 250 €", c: "text-foreground" },
+                      { l: "Dépenses", v: "18 940 €", c: "text-foreground" },
+                      { l: "Marge nette", v: "39,3 %", c: "text-teal" },
                     ].map((s) => (
                       <div
                         key={s.l}
@@ -194,19 +201,18 @@ export default function LandingPage() {
           </div>
         </section>
 
-        {/* Confiance / vie privée */}
+        {/* Preuve sociale */}
         <section className="border-y bg-muted/30 py-10">
           <div className="mx-auto max-w-6xl px-4 sm:px-6">
             <p className="text-center text-sm font-medium uppercase tracking-wider text-muted-foreground">
-              Conçu pour protéger votre argent et votre vie privée
+              Ils pilotent leur trésorerie avec AskFinance AI
             </p>
-            <div className="mt-6 flex flex-wrap items-center justify-center gap-x-10 gap-y-4 text-sm font-semibold text-muted-foreground/80">
-              {trust.map((t) => (
-                <span key={t} className="flex items-center gap-2">
-                  <Check className="h-4 w-4 text-teal" />
-                  {t}
-                </span>
-              ))}
+            <div className="mt-6 flex flex-wrap items-center justify-center gap-x-12 gap-y-4 text-lg font-semibold text-muted-foreground/70">
+              <span>Studio Marbre</span>
+              <span>Atelier Caron</span>
+              <span>Lefèvre &amp; Cie</span>
+              <span>Maison Pichard</span>
+              <span>Groupe Renaud</span>
             </div>
           </div>
         </section>
@@ -216,11 +222,11 @@ export default function LandingPage() {
           <div className="mx-auto max-w-6xl px-4 sm:px-6">
             <div className="mx-auto max-w-2xl text-center">
               <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
-                Tout ce qu'il faut pour gérer votre argent
+                Tout ce qu'il faut pour piloter votre trésorerie
               </h2>
               <p className="mt-4 text-lg text-muted-foreground">
-                Une application simple, pensée pour suivre votre budget au
-                quotidien.
+                Une plateforme pensée pour les dirigeants et les équipes finance
+                des TPE et PME.
               </p>
             </div>
             <div className="mt-14 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
@@ -245,7 +251,7 @@ export default function LandingPage() {
           <div className="mx-auto max-w-6xl px-4 sm:px-6">
             <div className="mx-auto max-w-2xl text-center">
               <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
-                Adopté par des milliers de particuliers
+                Adopté par les dirigeants de TPE et PME
               </h2>
             </div>
             <div className="mt-14 grid gap-6 lg:grid-cols-3">
@@ -277,13 +283,13 @@ export default function LandingPage() {
           <div className="mx-auto max-w-6xl px-4 sm:px-6">
             <div className="mx-auto max-w-2xl text-center">
               <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
-                Des tarifs simples et transparents
+                Des tarifs adaptés à votre entreprise
               </h2>
               <p className="mt-4 text-lg text-muted-foreground">
-                Commencez gratuitement, passez au Premium quand vous êtes prêt.
+                Choisissez le plan qui correspond à la taille de votre structure.
               </p>
             </div>
-            <div className="mx-auto mt-14 grid max-w-3xl items-start gap-6 lg:grid-cols-2">
+            <div className="mt-14 grid items-start gap-6 lg:grid-cols-3">
               {plans.map((plan) => (
                 <Card
                   key={plan.name}
@@ -305,11 +311,9 @@ export default function LandingPage() {
                     </p>
                     <div className="mt-5 flex items-baseline gap-1">
                       <span className="text-4xl font-bold tracking-tight">
-                        {`${plan.price} €`}
+                        {plan.price} €
                       </span>
-                      <span className="text-sm text-muted-foreground">
-                        {plan.cadence}
-                      </span>
+                      <span className="text-sm text-muted-foreground">/mois</span>
                     </div>
                     <Button
                       asChild
@@ -341,16 +345,16 @@ export default function LandingPage() {
           <div className="mx-auto max-w-6xl px-4 sm:px-6">
             <div className="overflow-hidden rounded-3xl bg-gradient-to-br from-primary to-teal px-6 py-16 text-center shadow-xl sm:px-16">
               <h2 className="text-balance text-3xl font-bold tracking-tight text-white sm:text-4xl">
-                Reprenez le contrôle de votre argent
+                Reprenez le contrôle de votre trésorerie
               </h2>
               <p className="mx-auto mt-4 max-w-xl text-balance text-white/85">
-                Rejoignez des milliers de particuliers qui gèrent leur budget
+                Rejoignez des centaines de TPE et PME qui pilotent leurs finances
                 avec sérénité.
               </p>
               <div className="mt-8 flex justify-center">
                 <Button size="lg" variant="secondary" asChild>
                   <Link href="/signup">
-                    Créer mon compte gratuit
+                    Créer mon compte
                     <ArrowRight className="h-4 w-4" />
                   </Link>
                 </Button>
@@ -367,7 +371,7 @@ export default function LandingPage() {
             <div className="max-w-xs">
               <Logo />
               <p className="mt-4 text-sm text-muted-foreground">
-                Le copilote IA de vos finances personnelles.
+                Le copilote de trésorerie des TPE et PME.
               </p>
             </div>
             <div className="grid grid-cols-2 gap-8 sm:grid-cols-3">

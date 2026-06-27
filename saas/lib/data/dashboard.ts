@@ -54,6 +54,11 @@ export interface MonthOption {
   label: string; // "Juin 2026"
 }
 
+export interface AccountOption {
+  value: string; // id du compte
+  label: string; // nom du compte
+}
+
 export interface DashboardData {
   kpis: Kpi[];
   cashflow: CashflowPoint[];
@@ -63,6 +68,8 @@ export interface DashboardData {
   availableCategories: string[]; // catégories de dépenses présentes (pour les budgets)
   months: MonthOption[]; // mois présents en base (pour le sélecteur)
   selectedMonth: string; // mois affiché ("AAAA-MM")
+  accounts: AccountOption[]; // comptes de l'utilisateur (pour le sélecteur)
+  selectedAccount: string; // "all" ou l'id du compte affiché
   hasData: boolean;
 }
 
@@ -75,6 +82,14 @@ interface DbTransaction {
   amount: number;
   type: "debit" | "credit";
   status: string;
+  is_transfer: boolean;
+  account_id: string | null;
+}
+
+interface DbAccount {
+  id: string;
+  name: string;
+  opening_balance: number;
 }
 
 // ---------- Constantes ----------
@@ -148,12 +163,12 @@ function buildKpi(
   };
 }
 
-function emptyKpis(): Kpi[] {
+function emptyKpis(opening = 0): Kpi[] {
   return [
-    buildKpi("Solde total", formatEUR(0), null),
+    buildKpi("Solde de trésorerie", formatEUR(opening), null),
     buildKpi("Dépenses du mois", formatEUR(0), null),
     buildKpi("Revenus du mois", formatEUR(0), null),
-    buildKpi("Taux d'épargne", "0 %", null),
+    buildKpi("Marge nette", "0 %", null),
   ];
 }
 
@@ -200,15 +215,47 @@ export const getProfile = cache(async (): Promise<Profile | null> => {
 // ---------- Données agrégées du dashboard ----------
 
 export async function getDashboardData(
-  selectedMonth?: string
+  selectedMonth?: string,
+  selectedAccount?: string
 ): Promise<DashboardData> {
   const supabase = createClient();
 
-  // Le RLS filtre déjà sur l'utilisateur connecté (user_id = auth.uid()).
-  const { data, error } = await supabase
+  // Comptes de l'utilisateur (pour le sélecteur + soldes d'ouverture).
+  const { data: accountRows } = await supabase
+    .from("accounts")
+    .select("id, name, opening_balance")
+    .order("created_at", { ascending: true });
+  const accountsData = (accountRows ?? []) as DbAccount[];
+  const accounts: AccountOption[] = accountsData.map((a) => ({
+    value: a.id,
+    label: a.name,
+  }));
+
+  // Compte sélectionné : "all" par défaut (ou si l'id demandé n'existe pas).
+  const accountFilter =
+    selectedAccount &&
+    selectedAccount !== "all" &&
+    accountsData.some((a) => a.id === selectedAccount)
+      ? selectedAccount
+      : "all";
+
+  // Solde d'ouverture du périmètre affiché.
+  const openingTotal =
+    accountFilter === "all"
+      ? accountsData.reduce((s, a) => s + Number(a.opening_balance), 0)
+      : Number(
+          accountsData.find((a) => a.id === accountFilter)?.opening_balance ?? 0
+        );
+
+  // Transactions (RLS = utilisateur connecté), filtrées par compte si besoin.
+  let query = supabase
     .from("transactions")
-    .select("id, date, merchant, category, account, amount, type, status")
+    .select(
+      "id, date, merchant, category, account, amount, type, status, is_transfer, account_id"
+    )
     .order("date", { ascending: false });
+  if (accountFilter !== "all") query = query.eq("account_id", accountFilter);
+  const { data, error } = await query;
 
   const txns: DbTransaction[] = (data ?? []).map((t) => ({
     ...(t as DbTransaction),
@@ -217,7 +264,7 @@ export async function getDashboardData(
 
   if (error || txns.length === 0) {
     return {
-      kpis: emptyKpis(),
+      kpis: emptyKpis(openingTotal),
       cashflow: [],
       categories: [],
       budgets: [],
@@ -225,9 +272,15 @@ export async function getDashboardData(
       availableCategories: [],
       months: [],
       selectedMonth: "",
+      accounts,
+      selectedAccount: accountFilter,
       hasData: false,
     };
   }
+
+  // Les virements internes comptent pour le solde mais sont exclus des analyses
+  // (dépenses / revenus / catégories / charges).
+  const spend = txns.filter((t) => !t.is_transfer);
 
   // Mois disponibles (du plus récent au plus ancien) pour le sélecteur.
   const monthKeys = Array.from(new Set(txns.map((t) => monthKey(t.date)))).sort(
@@ -246,7 +299,7 @@ export async function getDashboardData(
   const prevKey = previousMonthKey(refKey);
 
   const sumMonth = (key: string, type: "debit" | "credit") =>
-    txns
+    spend
       .filter((t) => monthKey(t.date) === key && t.type === type)
       .reduce((s, t) => s + Math.abs(t.amount), 0);
 
@@ -254,23 +307,25 @@ export async function getDashboardData(
   const revMois = sumMonth(refKey, "credit");
   const depPrev = sumMonth(prevKey, "debit");
   const revPrev = sumMonth(prevKey, "credit");
-  // Solde cumulé jusqu'à la fin du mois sélectionné.
-  const solde = txns
-    .filter((t) => monthKey(t.date) <= refKey)
-    .reduce((s, t) => s + t.amount, 0);
+  // Solde = solde d'ouverture + flux cumulés (virements inclus) jusqu'au mois choisi.
+  const solde =
+    openingTotal +
+    txns
+      .filter((t) => monthKey(t.date) <= refKey)
+      .reduce((s, t) => s + t.amount, 0);
   const marge = revMois > 0 ? ((revMois - depMois) / revMois) * 100 : 0;
   const margePrev = revPrev > 0 ? ((revPrev - depPrev) / revPrev) * 100 : 0;
 
   const kpis: Kpi[] = [
-    buildKpi("Solde total", formatEUR(solde), null),
+    buildKpi("Solde de trésorerie", formatEUR(solde), null),
     buildKpi("Dépenses du mois", formatEUR(depMois), depPrev > 0 ? ((depMois - depPrev) / depPrev) * 100 : null, true),
     buildKpi("Revenus du mois", formatEUR(revMois), revPrev > 0 ? ((revMois - revPrev) / revPrev) * 100 : null),
-    buildKpi("Taux d'épargne", `${marge.toFixed(1).replace(".", ",")} %`, revPrev > 0 ? marge - margePrev : null),
+    buildKpi("Marge nette", `${marge.toFixed(1).replace(".", ",")} %`, revPrev > 0 ? marge - margePrev : null),
   ];
 
-  // Flux de trésorerie : par mois, 12 plus récents, ordre chronologique.
+  // Flux de trésorerie : par mois, 12 plus récents, ordre chronologique (hors virements).
   const parMois = new Map<string, { revenus: number; depenses: number }>();
-  for (const t of txns) {
+  for (const t of spend) {
     const k = monthKey(t.date);
     const e = parMois.get(k) ?? { revenus: 0, depenses: 0 };
     if (t.type === "credit") e.revenus += Math.abs(t.amount);
@@ -282,9 +337,9 @@ export async function getDashboardData(
     .slice(-12)
     .map(([k, v]) => ({ mois: moisLabel(k), revenus: v.revenus, depenses: v.depenses }));
 
-  // Répartition des dépenses du mois de référence par catégorie.
+  // Répartition des dépenses du mois de référence par catégorie (hors virements).
   const parCat = new Map<string, number>();
-  for (const t of txns) {
+  for (const t of spend) {
     if (monthKey(t.date) === refKey && t.type === "debit") {
       parCat.set(t.category, (parCat.get(t.category) ?? 0) + Math.abs(t.amount));
     }
@@ -307,7 +362,7 @@ export async function getDashboardData(
     depense: parCat.get((b as { category: string }).category) ?? 0,
   }));
 
-  // 6 transactions les plus récentes.
+  // 6 transactions les plus récentes (toutes, virements compris).
   const recent: RecentTransaction[] = txns.slice(0, 6).map((t) => ({
     id: t.id,
     merchant: t.merchant,
@@ -317,9 +372,9 @@ export async function getDashboardData(
     type: t.type,
   }));
 
-  // Catégories de dépenses présentes (toutes périodes) → pour créer des budgets.
+  // Catégories de dépenses présentes (hors virements) → pour créer des budgets.
   const availableCategories = Array.from(
-    new Set(txns.filter((t) => t.type === "debit").map((t) => t.category))
+    new Set(spend.filter((t) => t.type === "debit").map((t) => t.category))
   ).sort((a, b) => a.localeCompare(b));
 
   return {
@@ -331,6 +386,8 @@ export async function getDashboardData(
     availableCategories,
     months,
     selectedMonth: refKey,
+    accounts,
+    selectedAccount: accountFilter,
     hasData: true,
   };
 }

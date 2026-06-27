@@ -13,9 +13,17 @@ import {
 } from "@/components/ui/card";
 import { CashflowChart } from "@/components/dashboard/cashflow-chart";
 import { CategoryChart } from "@/components/dashboard/category-chart";
-import { ImportButton } from "@/components/dashboard/import-button";
+import { ImportDialog } from "@/components/dashboard/import-dialog";
 import { BudgetManager } from "@/components/dashboard/budget-manager";
+import { RecurringCharges } from "@/components/dashboard/recurring-charges";
+import { ForecastChart } from "@/components/dashboard/forecast-chart";
+import { ReceivablesRadar } from "@/components/dashboard/receivables-radar";
+import { TaxVault } from "@/components/dashboard/tax-vault";
+import { EInvoiceReadiness } from "@/components/dashboard/einvoice-readiness";
 import { MonthSelect } from "@/components/dashboard/month-select";
+import { AccountSwitcher } from "@/components/dashboard/account-switcher";
+import { DetectTransfersButton } from "@/components/dashboard/detect-transfers-button";
+import { OpenAiChatButton } from "@/components/dashboard/open-ai-chat-button";
 import { cn, formatEUR } from "@/lib/utils";
 
 function EmptyState({ children }: { children: React.ReactNode }) {
@@ -29,11 +37,11 @@ function EmptyState({ children }: { children: React.ReactNode }) {
 export default async function DashboardPage({
   searchParams,
 }: {
-  searchParams: { month?: string };
+  searchParams: { month?: string; account?: string };
 }) {
   const [profile, data] = await Promise.all([
     getProfile(),
-    getDashboardData(searchParams.month),
+    getDashboardData(searchParams.month, searchParams.account),
   ]);
   const firstName = profile?.firstName || profile?.fullName || "";
   const monthLabel = data.months.find(
@@ -53,15 +61,20 @@ export default async function DashboardPage({
             {monthLabel ? ` — ${monthLabel}` : ""}.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <AccountSwitcher
+            accounts={data.accounts}
+            selected={data.selectedAccount}
+          />
           {data.months.length > 0 && (
             <MonthSelect months={data.months} selected={data.selectedMonth} />
           )}
+          <DetectTransfersButton />
           <Button variant="outline" size="sm">
             <Download className="h-4 w-4" />
             Exporter
           </Button>
-          <ImportButton />
+          <ImportDialog />
         </div>
       </div>
 
@@ -101,13 +114,22 @@ export default async function DashboardPage({
         ))}
       </div>
 
+      {/* Trésorerie prévisionnelle */}
+      <ForecastChart />
+
+      {/* Récupérer le cash (encaissements) + ne pas être surpris (fiscal) */}
+      <div className="grid gap-4 lg:grid-cols-2">
+        <ReceivablesRadar />
+        <TaxVault />
+      </div>
+
       {/* Graphiques */}
       <div className="grid gap-4 lg:grid-cols-5">
         <Card className="lg:col-span-3">
           <CardHeader className="flex-row items-center justify-between space-y-0">
             <div>
-              <CardTitle>Revenus &amp; dépenses</CardTitle>
-              <CardDescription>Sur les 12 derniers mois</CardDescription>
+              <CardTitle>Flux de trésorerie</CardTitle>
+              <CardDescription>Revenus vs dépenses · 12 mois</CardDescription>
             </div>
             <div className="flex items-center gap-4 text-xs">
               <span className="flex items-center gap-1.5">
@@ -165,12 +187,16 @@ export default async function DashboardPage({
             <p className="text-sm text-white/90">
               Posez vos questions et obtenez des analyses sur mesure.
             </p>
-            <Button asChild variant="secondary" className="mt-4 w-full">
-              <Link href="/dashboard/chat">Ouvrir le copilote</Link>
-            </Button>
+            <OpenAiChatButton />
           </CardContent>
         </Card>
       </div>
+
+      {/* Charges récurrentes */}
+      <RecurringCharges />
+
+      {/* Préparation à la facture électronique 2026/2027 */}
+      <EInvoiceReadiness />
 
       {/* Transactions récentes */}
       <Card>
