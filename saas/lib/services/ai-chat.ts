@@ -52,7 +52,8 @@ export const advisors: Advisor[] = [
 export async function sendAiChatMessage(
   message: string,
   advisor: AdvisorId,
-  conversationId: string | null = null
+  conversationId: string | null,
+  workspaceId: string
 ): Promise<ChatResponse> {
   const supabase = createClient();
   const {
@@ -68,6 +69,7 @@ export async function sendAiChatMessage(
     headers: {
       Authorization: `Bearer ${token}`,
       "Content-Type": "application/json",
+      "X-Workspace-Id": workspaceId,
     },
     body: JSON.stringify({ message, advisor, conversation_id: conversationId }),
   });
@@ -80,12 +82,16 @@ export async function sendAiChatMessage(
   return res.json();
 }
 
-// Liste les conversations de l'utilisateur (RLS : les siennes uniquement).
-export async function getConversations(): Promise<ConversationSummary[]> {
+// Liste les conversations de l'utilisateur dans cet espace.
+// (RLS `conv_owner` : chacun ne voit que ses propres conversations.)
+export async function getConversations(
+  workspaceId: string
+): Promise<ConversationSummary[]> {
   const supabase = createClient();
   const { data } = await supabase
     .from("conversations")
     .select("id, title, updated_at")
+    .eq("workspace_id", workspaceId)
     .order("updated_at", { ascending: false });
   return (data ?? []) as ConversationSummary[];
 }
@@ -119,6 +125,7 @@ export async function streamAiChatMessage(
   message: string,
   advisor: AdvisorId,
   conversationId: string | null,
+  workspaceId: string,
   callbacks: StreamCallbacks
 ): Promise<void> {
   const supabase = createClient();
@@ -135,6 +142,7 @@ export async function streamAiChatMessage(
     headers: {
       Authorization: `Bearer ${token}`,
       "Content-Type": "application/json",
+      "X-Workspace-Id": workspaceId,
     },
     body: JSON.stringify({ message, advisor, conversation_id: conversationId }),
   });

@@ -22,17 +22,17 @@ const TYPE_LABEL: Record<string, string> = {
   variable: "Charge variable",
 };
 
-export function RecurringCharges() {
+export function RecurringCharges({ workspaceId }: { workspaceId: string }) {
   const [data, setData] = useState<RecurringResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
   useEffect(() => {
-    getRecurringCharges()
+    getRecurringCharges(workspaceId)
       .then(setData)
       .catch(() => setError(true))
       .finally(() => setLoading(false));
-  }, []);
+  }, [workspaceId]);
 
   return (
     <Card>

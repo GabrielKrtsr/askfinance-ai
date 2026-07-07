@@ -1,9 +1,21 @@
 """Point d'entrée de l'API AskFinance (FastAPI)."""
 from __future__ import annotations
 
+import os
+
 from dotenv import load_dotenv
 
 load_dotenv()  # charge .env avant d'importer les services
+
+# Échec immédiat et explicite si la config indispensable manque (plutôt qu'un
+# 500 opaque à la première requête).
+_REQUIRED_ENV = ("SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY")
+_missing = [name for name in _REQUIRED_ENV if not os.environ.get(name)]
+if _missing:
+    raise RuntimeError(
+        f"Variables d'environnement manquantes : {', '.join(_missing)}. "
+        "Renseignez-les dans le fichier .env de l'API."
+    )
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -18,10 +30,18 @@ from controller.ai_controller import router as ai_router
 
 app = FastAPI(title="AskFinance API")
 
-# Autorise le front Next.js (dev) à appeler l'API
+# Origines autorisées : CORS_ORIGINS="https://app.exemple.fr,https://…" en prod,
+# repli sur le front Next.js local en dev.
+_cors_origins = [
+    origin.strip()
+    for origin in os.environ.get(
+        "CORS_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000"
+    ).split(",")
+    if origin.strip()
+]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_origins=_cors_origins,
     allow_methods=["*"],
     allow_headers=["*"],
 )

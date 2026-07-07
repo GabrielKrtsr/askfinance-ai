@@ -7,10 +7,11 @@ from services.csv_parser import parse_transactions
 from services.supabase_service import (
     create_import,
     delete_import,
+    get_account_workspace,
     get_user_id,
     insert_transactions,
-    list_accounts,
     update_import_count,
+    user_is_member,
 )
 
 router = APIRouter()
@@ -28,19 +29,21 @@ async def import_releve(
     if not user_id:
         raise HTTPException(status_code=401, detail="Token invalide ou manquant.")
 
-    # 1bis. Le compte cible doit appartenir à l'utilisateur
-    if account_id not in {a["id"] for a in list_accounts(user_id)}:
-        raise HTTPException(status_code=403, detail="Compte introuvable.")
+    # 1bis. Le compte détermine l'espace ; l'utilisateur doit en être membre actif.
+    #       (Garde manuelle : la SERVICE_ROLE_KEY contourne la RLS.)
+    workspace_id = get_account_workspace(account_id)
+    if not workspace_id or not user_is_member(workspace_id, user_id):
+        raise HTTPException(status_code=403, detail="Compte introuvable ou accès refusé.")
 
     # 2. Lecture + parsing du CSV (pandas)
     content = await file.read()
     try:
-        result = parse_transactions(content, user_id, account_id)
+        result = parse_transactions(content, workspace_id, account_id)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
     # 3. Créer un lot d'import et taguer chaque transaction (pour pouvoir l'annuler)
-    batch = create_import(user_id, account_id, file.filename)
+    batch = create_import(workspace_id, account_id, file.filename)
     import_id = batch["id"] if batch else None
     for record in result.records:
         record["import_id"] = import_id
@@ -51,9 +54,9 @@ async def import_releve(
     # 5. Finaliser le lot : compter, ou le supprimer si rien n'a été inséré
     if import_id:
         if inserted > 0:
-            update_import_count(import_id, inserted)
+            update_import_count(workspace_id, import_id, inserted)
         else:
-            delete_import(import_id)
+            delete_import(workspace_id, import_id)
 
     duplicates = result.in_file_duplicates + (len(result.records) - inserted)
     return {

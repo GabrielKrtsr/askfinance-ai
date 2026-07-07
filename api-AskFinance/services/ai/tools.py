@@ -15,10 +15,11 @@ from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 
 from services.forecast import build_forecast
-from services.receivables import detect_receivables
+from services.receivables import inflows_for_forecast, reconcile_receivables
 from services.recurring import detect_recurring
 from services.supabase_service import (
     fetch_budgets,
+    fetch_expected_receivables,
     fetch_tax_settings,
     fetch_transactions,
     fetch_transactions_for_ai,
@@ -130,10 +131,19 @@ def get_kpis(user_id: str, **_) -> dict:
 
 def get_forecast(user_id: str, **_) -> dict:
     transactions = fetch_transactions(user_id)
+    horizon_end = date.today() + timedelta(days=200)
     deadlines = tax_deadlines_for_forecast(
-        transactions, fetch_tax_settings(user_id), date.today(), date.today() + timedelta(days=200)
+        transactions, fetch_tax_settings(user_id), date.today(), horizon_end
     )
-    forecast = build_forecast(transactions, float(_opening_balance(user_id)), tax_deadlines=deadlines)
+    inflows = inflows_for_forecast(
+        fetch_expected_receivables(user_id), transactions, date.today(), horizon_end
+    )
+    forecast = build_forecast(
+        transactions,
+        float(_opening_balance(user_id)),
+        tax_deadlines=deadlines,
+        expected_inflows=inflows,
+    )
     return {
         "solde_actuel": _eur(forecast.get("solde_actuel", 0)),
         "premier_decouvert": forecast.get("premier_decouvert"),
@@ -177,19 +187,22 @@ def get_budgets(user_id: str, **_) -> dict:
 
 
 def get_overdue_receivables(user_id: str, **_) -> dict:
-    radar = detect_receivables(fetch_transactions(user_id))
+    radar = reconcile_receivables(
+        fetch_expected_receivables(user_id), fetch_transactions(user_id)
+    )
     return {
         "encaissements_en_retard": [
             {
                 "client": r["client"],
                 "montant_attendu": _eur(_decimal(r["montant_attendu"])),
                 "jours_retard": r["jours_retard"],
-                "prochaine_attendue": r["prochaine_attendue"],
+                "date_prevue": r["date_prevue"],
             }
             for r in radar.get("en_retard", [])
         ],
         "nombre_en_retard": len(radar.get("en_retard", [])),
-        "total_attendu_mensuel": _eur(_decimal(radar.get("total_attendu_mensuel", 0))),
+        "total_en_retard": _eur(_decimal(radar.get("total_en_retard", 0))),
+        "total_attendu": _eur(_decimal(radar.get("total_attendu", 0))),
     }
 
 
@@ -279,10 +292,10 @@ TOOLS: list[dict] = [
     {
         "name": "get_overdue_receivables",
         "description": (
-            "Encaissements clients récurrents en retard (paiements habituels qui ne sont "
-            "pas arrivés à la date attendue) + total mensuel attendu. À utiliser pour "
-            "« qui me doit de l'argent », « quels clients sont en retard de paiement », "
-            "« mes impayés », « mes relances »."
+            "Encaissements clients en retard, d'après l'échéancier déclaré par "
+            "l'utilisateur et rapproché des crédits bancaires réels (un attendu sans "
+            "crédit reçu après la date prévue). À utiliser pour « qui me doit de "
+            "l'argent », « quels clients sont en retard », « mes impayés », « mes relances »."
         ),
         "parameters": {"type": "object", "properties": {}, "required": []},
         "handler": get_overdue_receivables,

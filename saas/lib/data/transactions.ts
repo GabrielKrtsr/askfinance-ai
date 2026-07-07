@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { getCurrentWorkspace } from "@/lib/data/workspace";
 import { formatDateFr } from "@/lib/utils";
 
 export interface TransactionRow {
@@ -16,37 +17,44 @@ export interface TransactionRow {
 interface DbRow {
   id: string;
   date: string;
-  merchant: string;
+  label: string;
   category: string;
-  account: string | null;
   amount: number;
-  type: "debit" | "credit";
+  direction: "debit" | "credit";
   status: string;
+  account_id: string | null;
+  accounts: { name: string } | null; // jointure pour le nom du compte
 }
 
-// Récupère toutes les transactions de l'utilisateur connecté (RLS) + la
-// liste des catégories réellement présentes (pour le filtre).
+// Récupère les transactions de l'espace courant (RLS) + la liste des catégories
+// réellement présentes (pour le filtre). Le nom du compte vient d'une jointure.
 export async function getTransactions(): Promise<{
   transactions: TransactionRow[];
   categories: string[];
 }> {
+  const workspace = await getCurrentWorkspace();
+  if (!workspace) return { transactions: [], categories: [] };
+
   const supabase = createClient();
   const { data, error } = await supabase
     .from("transactions")
-    .select("id, date, merchant, category, account, amount, type, status")
+    .select(
+      "id, date, label, category, amount, direction, status, account_id, accounts(name)"
+    )
+    .eq("workspace_id", workspace.id)
     .order("date", { ascending: false });
 
   if (error || !data) return { transactions: [], categories: [] };
 
-  const transactions: TransactionRow[] = (data as DbRow[]).map((t) => ({
+  const transactions: TransactionRow[] = (data as unknown as DbRow[]).map((t) => ({
     id: t.id,
     date: t.date,
     dateLabel: formatDateFr(t.date),
-    merchant: t.merchant,
+    merchant: t.label,
     category: t.category,
-    account: t.account,
+    account: t.accounts?.name ?? null,
     amount: Number(t.amount),
-    type: t.type,
+    type: t.direction,
     status: t.status,
   }));
 

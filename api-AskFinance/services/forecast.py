@@ -74,10 +74,24 @@ def _schedule_tax_deadlines(deadlines: list[dict], start, end) -> dict:
     return out
 
 
+def _schedule_inflows(inflows: list[dict] | None, start, end) -> dict:
+    """Place les encaissements attendus (entrées positives) sur leurs dates futures."""
+    out: dict = {}
+    for d in inflows or []:
+        day = pd.to_datetime(d.get("date"), errors="coerce")
+        if pd.isna(day):
+            continue
+        day = day.normalize()
+        if start <= day <= end:
+            out[day] = out.get(day, 0.0) + abs(float(d.get("amount", 0.0)))
+    return out
+
+
 def build_forecast(
     transactions: list[dict],
     opening_balance: float = 0.0,
     tax_deadlines: list[dict] | None = None,
+    expected_inflows: list[dict] | None = None,
 ) -> dict:
     if not transactions:
         return _empty()
@@ -94,7 +108,11 @@ def build_forecast(
     # Solde = solde d'ouverture des comptes + flux nets réels
     solde_actuel = opening_balance + float(df["amount"].sum())
     last_date = df["date"].max().normalize()
-    start = last_date + pd.Timedelta(days=1)
+    # La projection démarre AUJOURD'HUI (pas à la dernière transaction) : si les
+    # données ont du retard, « 90 jours » et « alerte 30 jours » restent ancrés
+    # sur le présent au lieu de décrire une fenêtre déjà passée.
+    today = pd.Timestamp.today().normalize()
+    start = max(last_date + pd.Timedelta(days=1), today)
     end = start + pd.Timedelta(days=HORIZON - 1)
     future_dates = pd.date_range(start, end)
 
@@ -119,6 +137,7 @@ def build_forecast(
     predict_background = _fit_background(background)
     recurring_future = _schedule_recurring(recurring["charges"], start, end)
     tax_future = _schedule_tax_deadlines(tax_deadlines, start, end)
+    inflow_future = _schedule_inflows(expected_inflows, start, end)
     resid_std = float(background.std()) if len(background) > 1 else 0.0
 
     # Projection jour par jour : solde = solde + cumsum(flux)
@@ -129,6 +148,7 @@ def build_forecast(
             predict_background(d)
             + recurring_future.get(d, 0.0)
             + tax_future.get(d, 0.0)
+            + inflow_future.get(d, 0.0)
         )
         marge = resid_std * (i**0.5)  # l'incertitude s'élargit avec l'horizon
         serie.append({

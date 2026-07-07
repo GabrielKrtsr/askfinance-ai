@@ -37,7 +37,7 @@ MAX_TOOL_ROUNDS = 4
 
 
 def answer_financial_question(
-    user_id: str,
+    workspace_id: str,
     message: str,
     persona_id: str,
     history: list[dict] | None = None,
@@ -47,14 +47,14 @@ def answer_financial_question(
     system = build_system_prompt(persona)
     history = history or []
     try:
-        answer = _run_agent_loop(user_id, message, system, history)
+        answer = _run_agent_loop(workspace_id, message, system, history)
     except GeminiCallError:
-        answer = _fallback_single_call(user_id, message, system, history)
+        answer = _fallback_single_call(workspace_id, message, system, history)
     return {"answer": answer, "advisor": persona}
 
 
 def stream_financial_answer(
-    user_id: str,
+    workspace_id: str,
     message: str,
     persona_id: str,
     history: list[dict] | None = None,
@@ -96,7 +96,7 @@ def stream_financial_answer(
             function_result_item(
                 call["id"],
                 call["name"],
-                json.dumps(run_tool(call["name"], user_id, call.get("arguments")), ensure_ascii=False),
+                json.dumps(run_tool(call["name"], workspace_id, call.get("arguments")), ensure_ascii=False),
             )
             for call in pending
         ]
@@ -114,7 +114,7 @@ def _history_items(history: list[dict]) -> list[dict]:
     ]
 
 
-def _run_agent_loop(user_id: str, message: str, system: str, history: list[dict]) -> str:
+def _run_agent_loop(workspace_id: str, message: str, system: str, history: list[dict]) -> str:
     """Boucle agent non-streaming : le modèle appelle des outils tant qu'il en a besoin."""
     input_items = _history_items(history) + [user_input_item(message)]
     previous_id: str | None = None
@@ -135,7 +135,7 @@ def _run_agent_loop(user_id: str, message: str, system: str, history: list[dict]
             function_result_item(
                 call["id"],
                 call["name"],
-                json.dumps(run_tool(call["name"], user_id, call.get("arguments")), ensure_ascii=False),
+                json.dumps(run_tool(call["name"], workspace_id, call.get("arguments")), ensure_ascii=False),
             )
             for call in calls
         ]
@@ -144,9 +144,9 @@ def _run_agent_loop(user_id: str, message: str, system: str, history: list[dict]
     return result.get("text") or _empty_answer()
 
 
-def _fallback_single_call(user_id: str, message: str, system: str, history: list[dict]) -> str:
+def _fallback_single_call(workspace_id: str, message: str, system: str, history: list[dict]) -> str:
     """Repli : un seul appel, tout le contexte injecté (ancien comportement)."""
-    context = build_full_context(user_id)
+    context = build_full_context(workspace_id)
     parts = ["Question utilisateur :", message, ""]
     if history:
         parts += [

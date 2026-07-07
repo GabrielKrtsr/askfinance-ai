@@ -46,14 +46,18 @@ def _first_present(columns: set[str], aliases: list[str]) -> str | None:
 
 
 def _to_number(series: pd.Series) -> pd.Series:
-    """'-1 234,56 €' -> -1234.56 (colonne entière d'un coup)."""
+    """'-1 234,56 €' ou '-1.234,56' -> -1234.56 (colonne entière d'un coup)."""
     cleaned = (
         series.astype(str)
         .str.replace(r"[\s ]", "", regex=True)  # espaces normaux + insécables
         .str.replace("€", "", regex=False)
         .str.replace("EUR", "", regex=False)
-        .str.replace(",", ".", regex=False)
     )
+    # Format FR avec point de milliers ("1.234,56") : le point saute, la virgule
+    # devient le séparateur décimal. Sans virgule, le point reste décimal ("12.50").
+    has_comma = cleaned.str.contains(",", regex=False)
+    cleaned = cleaned.where(~has_comma, cleaned.str.replace(".", "", regex=False))
+    cleaned = cleaned.str.replace(",", ".", regex=False)
     return pd.to_numeric(cleaned, errors="coerce")
 
 
@@ -76,7 +80,7 @@ def _read_csv(content: bytes) -> pd.DataFrame:
 
 
 def parse_transactions(
-    content: bytes, user_id: str, account_id: str
+    content: bytes, workspace_id: str, account_id: str
 ) -> ParseResult:
     df = _read_csv(content)
     df.columns = [_normalize(c) for c in df.columns]
@@ -166,15 +170,14 @@ def parse_transactions(
 
     records = [
         {
-            "user_id": user_id,
+            "workspace_id": workspace_id,
             "account_id": account_id,
             "date": row.date,
-            "merchant": row.merchant,
+            "label": row.merchant,
             "category": row.category,
-            "account": row.account or None,
             "amount": float(row.amount),
-            "type": row.type,
-            "status": "Validé",
+            "direction": row.type,
+            "status": "cleared",
             "is_transfer": bool(row.is_transfer),
             "fingerprint": row.fingerprint,
         }

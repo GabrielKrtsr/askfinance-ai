@@ -25,17 +25,17 @@ const EMPTY: ForecastResult = {
   alerte_30j: false,
 };
 
-// Récupère la prévision de trésorerie 90 jours depuis l'API Python.
-export async function getForecast(): Promise<ForecastResult> {
+// Récupère la prévision de trésorerie 90 jours de l'espace courant.
+export async function getForecast(workspaceId: string): Promise<ForecastResult> {
   const supabase = createClient();
   const {
     data: { session },
   } = await supabase.auth.getSession();
   const token = session?.access_token;
-  if (!token) return EMPTY;
+  if (!token || !workspaceId) return EMPTY;
 
   const res = await fetch(`${API_URL}/transactions/forecast`, {
-    headers: { Authorization: `Bearer ${token}` },
+    headers: { Authorization: `Bearer ${token}`, "X-Workspace-Id": workspaceId },
   });
   if (!res.ok) throw new Error("Échec de la prévision de trésorerie.");
   return res.json();

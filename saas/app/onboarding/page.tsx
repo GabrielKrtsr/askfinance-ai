@@ -1,303 +1,367 @@
 "use client";
 
-import { useState } from "react";
-import Link from "next/link";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
-  ArrowRight,
+  Building2,
   Check,
-  FileSpreadsheet,
-  PartyPopper,
-  UploadCloud,
+  KeyRound,
+  Loader2,
+  Plus,
+  User,
+  Users,
 } from "lucide-react";
 
 import { Logo } from "@/components/logo";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { createWorkspace, joinByCode } from "@/lib/actions/workspaces";
 import { cn } from "@/lib/utils";
 
-const steps = [
-  { id: 1, label: "Import du fichier" },
-  { id: 2, label: "Vérification des colonnes" },
-  { id: 3, label: "Confirmation" },
-];
-
-// Aperçu figé d'un CSV importé
-const previewRows = [
-  ["02/06/2026", "SALAIRES JUIN LOT", "-8200,00", "Compte courant Pro"],
-  ["03/06/2026", "SCI DES LILAS LOYER", "-2600,00", "Compte courant Pro"],
-  ["05/06/2026", "VIR STUDIO MARBRE", "+4200,00", "Compte courant Pro"],
-  ["08/06/2026", "METRO CASH CARRY", "-512,34", "Compte courant Pro"],
-  ["09/06/2026", "OVHCLOUD", "-89,90", "Carte Pro Visa"],
-];
-
-const columnMapping = [
-  { source: "Colonne A", sample: "02/06/2026", target: "date" },
-  { source: "Colonne B", sample: "SALAIRES JUIN LOT", target: "merchant" },
-  { source: "Colonne C", sample: "-8200,00", target: "amount" },
-  { source: "Colonne D", sample: "Compte courant Pro", target: "account" },
-];
-
-const targetFields = [
-  { value: "date", label: "Date" },
-  { value: "merchant", label: "Libellé / Bénéficiaire" },
-  { value: "amount", label: "Montant" },
-  { value: "account", label: "Compte" },
-  { value: "ignore", label: "Ignorer" },
-];
+type Step =
+  | "type"
+  | "personal"
+  | "group"
+  | "proChoice"
+  | "business"
+  | "join"
+  | "pending";
 
 export default function OnboardingPage() {
-  const [step, setStep] = useState(1);
-  const [uploaded, setUploaded] = useState(false);
+  const router = useRouter();
+  const [step, setStep] = useState<Step>("type");
+  const [name, setName] = useState("");
+  const [code, setCode] = useState("");
+  const [pendingName, setPendingName] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const invite = params.get("invite");
+    if (!invite) return;
+    setCode(invite.trim().toUpperCase());
+    setStep("join");
+  }, []);
+
+  function go(next: Step) {
+    setError(null);
+    setStep(next);
+  }
+
+  async function handleCreate(type: "personal" | "business" | "group") {
+    setLoading(true);
+    setError(null);
+    try {
+      await createWorkspace({ type, name: name.trim() });
+      router.push("/dashboard");
+      router.refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Une erreur est survenue.");
+      setLoading(false);
+    }
+  }
+
+  async function handleJoin() {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await joinByCode(code);
+      if (res.status === "active") {
+        router.push("/dashboard");
+        router.refresh();
+      } else {
+        setPendingName(res.workspaceName);
+        go("pending");
+        setLoading(false);
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Code invalide.");
+      setLoading(false);
+    }
+  }
 
   return (
     <div className="flex min-h-screen flex-col bg-muted/30">
       <header className="border-b bg-background">
-        <div className="mx-auto flex h-16 max-w-3xl items-center justify-between px-4 sm:px-6">
+        <div className="mx-auto flex h-16 max-w-3xl items-center px-4 sm:px-6">
           <Logo />
-          <span className="text-sm text-muted-foreground">
-            Étape {step} sur 3
-          </span>
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-10 sm:px-6">
-        {/* Stepper */}
-        <ol className="mb-10 flex items-center">
-          {steps.map((s, i) => {
-            const done = step > s.id;
-            const active = step === s.id;
-            return (
-              <li key={s.id} className="flex flex-1 items-center last:flex-none">
-                <div className="flex items-center gap-3">
-                  <span
-                    className={cn(
-                      "flex h-9 w-9 shrink-0 items-center justify-center rounded-full border text-sm font-semibold transition-colors",
-                      done && "border-teal bg-teal text-white",
-                      active && "border-primary bg-primary text-white",
-                      !done && !active && "border-border bg-background text-muted-foreground"
-                    )}
-                  >
-                    {done ? <Check className="h-4 w-4" /> : s.id}
-                  </span>
-                  <span
-                    className={cn(
-                      "hidden text-sm font-medium sm:block",
-                      active ? "text-foreground" : "text-muted-foreground"
-                    )}
-                  >
-                    {s.label}
-                  </span>
-                </div>
-                {i < steps.length - 1 && (
-                  <div
-                    className={cn(
-                      "mx-4 h-px flex-1",
-                      step > s.id ? "bg-teal" : "bg-border"
-                    )}
-                  />
-                )}
-              </li>
-            );
-          })}
-        </ol>
-
-        {/* Étape 1 : import */}
-        {step === 1 && (
-          <Card className="animate-fade-in p-8">
-            <h1 className="text-xl font-bold tracking-tight">
-              Importez votre relevé bancaire
-            </h1>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Exportez un fichier CSV depuis votre banque, puis déposez-le
-              ci-dessous. Vos données restent privées.
+      <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col justify-center px-4 py-10 sm:px-6">
+        {/* Étape 1 — Perso ou Pro */}
+        {step === "type" && (
+          <div className="animate-fade-in">
+            <h1 className="text-2xl font-bold tracking-tight">Que voulez-vous gérer ?</h1>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Vous pourrez ajouter d'autres espaces plus tard.
             </p>
-
+            <div className="mt-6 grid gap-4 sm:grid-cols-3">
+              <ChoiceCard
+                icon={<User className="h-6 w-6" />}
+                title="Mes finances perso"
+                description="Budget, dépenses, épargne — pour vous seul."
+                onClick={() => go("personal")}
+              />
+              <ChoiceCard
+                icon={<Users className="h-6 w-6" />}
+                title="Un groupe / foyer"
+                description="Dépenses partagées à plusieurs (couple, coloc, famille)."
+                onClick={() => go("group")}
+              />
+              <ChoiceCard
+                icon={<Building2 className="h-6 w-6" />}
+                title="Une entreprise"
+                description="Trésorerie, fiscalité, encaissements — en équipe."
+                onClick={() => go("proChoice")}
+              />
+            </div>
             <button
               type="button"
-              onClick={() => setUploaded(true)}
-              className={cn(
-                "mt-6 flex w-full flex-col items-center justify-center rounded-xl border-2 border-dashed p-10 text-center transition-colors",
-                uploaded
-                  ? "border-teal/60 bg-teal/5"
-                  : "border-border hover:border-primary/50 hover:bg-muted/50"
-              )}
+              onClick={() => go("join")}
+              className="mt-6 text-sm text-muted-foreground transition-colors hover:text-foreground"
             >
-              {uploaded ? (
-                <>
-                  <span className="flex h-12 w-12 items-center justify-center rounded-full bg-teal/10 text-teal">
-                    <FileSpreadsheet className="h-6 w-6" />
-                  </span>
-                  <p className="mt-3 font-medium">releve-juin-2026.csv</p>
-                  <p className="text-sm text-muted-foreground">
-                    142 transactions détectées · 28 Ko
-                  </p>
-                </>
-              ) : (
-                <>
-                  <span className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
-                    <UploadCloud className="h-6 w-6" />
-                  </span>
-                  <p className="mt-3 font-medium">
-                    Glissez votre fichier CSV ici
-                  </p>
-                  <p className="text-sm text-muted-foreground">
-                    ou cliquez pour parcourir · CSV, OFX, QIF
-                  </p>
-                </>
-              )}
+              Vous avez un{" "}
+              <span className="font-medium text-primary">code d'invitation</span> ?
+              Rejoindre un espace
             </button>
-
-            <div className="mt-8 flex justify-between">
-              <Button variant="ghost" asChild>
-                <Link href="/signup">
-                  <ArrowLeft className="h-4 w-4" />
-                  Retour
-                </Link>
-              </Button>
-              <Button onClick={() => setStep(2)} disabled={!uploaded}>
-                Continuer
-                <ArrowRight className="h-4 w-4" />
-              </Button>
-            </div>
-          </Card>
+          </div>
         )}
 
-        {/* Étape 2 : mapping des colonnes */}
-        {step === 2 && (
-          <Card className="animate-fade-in p-8">
-            <h1 className="text-xl font-bold tracking-tight">
-              Vérifiez la correspondance des colonnes
-            </h1>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Nous avons détecté automatiquement vos colonnes. Ajustez-les si
-              nécessaire.
+        {/* Étape 2a — Nom de l'espace perso */}
+        {step === "personal" && (
+          <FormCard
+            title="Nommez votre espace perso"
+            description="Par exemple « Mon budget » ou votre prénom."
+            onBack={() => go("type")}
+            error={error}
+          >
+            <div className="space-y-2">
+              <Label htmlFor="ws-name">Nom de l'espace</Label>
+              <Input
+                id="ws-name"
+                autoFocus
+                placeholder="Mon budget"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+              />
+            </div>
+            <Button
+              className="mt-6 w-full"
+              size="lg"
+              disabled={loading || !name.trim()}
+              onClick={() => handleCreate("personal")}
+            >
+              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+              Créer mon espace
+            </Button>
+          </FormCard>
+        )}
+
+        {/* Étape 2c — Nom du groupe */}
+        {step === "group" && (
+          <FormCard
+            title="Nommez votre groupe"
+            description="Par exemple « Maison », « Gabriel & Clara » ou « Coloc »."
+            onBack={() => go("type")}
+            error={error}
+          >
+            <div className="space-y-2">
+              <Label htmlFor="grp-name">Nom du groupe</Label>
+              <Input
+                id="grp-name"
+                autoFocus
+                placeholder="Gabriel & Clara"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+              />
+            </div>
+            <Button
+              className="mt-6 w-full"
+              size="lg"
+              disabled={loading || !name.trim()}
+              onClick={() => handleCreate("group")}
+            >
+              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+              Créer le groupe
+            </Button>
+          </FormCard>
+        )}
+
+        {/* Étape 2b — Créer ou rejoindre une entreprise */}
+        {step === "proChoice" && (
+          <div className="animate-fade-in">
+            <BackButton onClick={() => go("type")} />
+            <h1 className="mt-4 text-2xl font-bold tracking-tight">Votre entreprise</h1>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Créez-la, ou rejoignez-en une existante avec un code.
             </p>
-
-            <div className="mt-6 space-y-3">
-              {columnMapping.map((col) => (
-                <div
-                  key={col.source}
-                  className="grid grid-cols-1 items-center gap-3 rounded-lg border bg-muted/30 p-3 sm:grid-cols-[1fr_auto_1fr]"
-                >
-                  <div>
-                    <p className="text-sm font-medium">{col.source}</p>
-                    <p className="truncate text-xs text-muted-foreground">
-                      ex. « {col.sample} »
-                    </p>
-                  </div>
-                  <ArrowRight className="hidden h-4 w-4 text-muted-foreground sm:block" />
-                  <Select defaultValue={col.target}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {targetFields.map((f) => (
-                        <SelectItem key={f.value} value={f.value}>
-                          {f.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              ))}
+            <div className="mt-6 grid gap-4 sm:grid-cols-2">
+              <ChoiceCard
+                icon={<Plus className="h-6 w-6" />}
+                title="Créer une entreprise"
+                description="Vous démarrez un nouvel espace et en êtes responsable."
+                onClick={() => go("business")}
+              />
+              <ChoiceCard
+                icon={<KeyRound className="h-6 w-6" />}
+                title="Rejoindre une entreprise"
+                description="On vous a donné un code d'accès."
+                onClick={() => go("join")}
+              />
             </div>
-
-            <div className="mt-8 overflow-hidden rounded-lg border">
-              <div className="border-b bg-muted/50 px-4 py-2 text-xs font-medium text-muted-foreground">
-                Aperçu des 5 premières lignes
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b text-left text-xs text-muted-foreground">
-                      <th className="px-4 py-2 font-medium">Date</th>
-                      <th className="px-4 py-2 font-medium">Libellé</th>
-                      <th className="px-4 py-2 text-right font-medium">Montant</th>
-                      <th className="px-4 py-2 font-medium">Compte</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {previewRows.map((row, i) => (
-                      <tr key={i} className="border-b last:border-0">
-                        <td className="whitespace-nowrap px-4 py-2">{row[0]}</td>
-                        <td className="px-4 py-2">{row[1]}</td>
-                        <td
-                          className={cn(
-                            "whitespace-nowrap px-4 py-2 text-right font-medium",
-                            row[2].startsWith("+")
-                              ? "text-emerald-600"
-                              : "text-foreground"
-                          )}
-                        >
-                          {row[2]} €
-                        </td>
-                        <td className="whitespace-nowrap px-4 py-2 text-muted-foreground">
-                          {row[3]}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            <div className="mt-8 flex justify-between">
-              <Button variant="ghost" onClick={() => setStep(1)}>
-                <ArrowLeft className="h-4 w-4" />
-                Retour
-              </Button>
-              <Button onClick={() => setStep(3)}>
-                Importer 142 transactions
-                <ArrowRight className="h-4 w-4" />
-              </Button>
-            </div>
-          </Card>
+          </div>
         )}
 
-        {/* Étape 3 : confirmation */}
-        {step === 3 && (
+        {/* Étape 3a — Nom de l'entreprise */}
+        {step === "business" && (
+          <FormCard
+            title="Nom de l'entreprise"
+            description="Le nom affiché de votre espace."
+            onBack={() => go("proChoice")}
+            error={error}
+          >
+            <div className="space-y-2">
+              <Label htmlFor="co-name">Nom de l'entreprise</Label>
+              <Input
+                id="co-name"
+                autoFocus
+                placeholder="AskFinance SAS"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+              />
+            </div>
+            <Button
+              className="mt-6 w-full"
+              size="lg"
+              disabled={loading || !name.trim()}
+              onClick={() => handleCreate("business")}
+            >
+              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+              Créer l'entreprise
+            </Button>
+          </FormCard>
+        )}
+
+        {/* Étape 3b — Rejoindre par code */}
+        {step === "join" && (
+          <FormCard
+            title="Rejoindre un espace"
+            description="Vérifiez le code d'invitation puis envoyez votre demande d'accès."
+            onBack={() => go("type")}
+            error={error}
+          >
+            <div className="space-y-2">
+              <Label htmlFor="join-code">Code d'accès</Label>
+              <Input
+                id="join-code"
+                autoFocus
+                placeholder="A1B2C3D4"
+                className="font-mono uppercase tracking-widest"
+                value={code}
+                onChange={(e) => setCode(e.target.value.toUpperCase())}
+              />
+            </div>
+            <Button
+              className="mt-6 w-full"
+              size="lg"
+              disabled={loading || code.trim().length < 4}
+              onClick={handleJoin}
+            >
+              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <KeyRound className="h-4 w-4" />}
+              Demander l'accès
+            </Button>
+          </FormCard>
+        )}
+
+        {/* Étape 4 — Demande envoyée, en attente de validation */}
+        {step === "pending" && (
           <Card className="animate-fade-in p-8 text-center">
             <span className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-teal/10 text-teal">
-              <PartyPopper className="h-8 w-8" />
+              <Check className="h-8 w-8" />
             </span>
-            <h1 className="mt-5 text-2xl font-bold tracking-tight">
-              Tout est prêt, Camille !
-            </h1>
+            <h1 className="mt-5 text-xl font-bold tracking-tight">Demande envoyée</h1>
             <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
-              142 transactions ont été importées et catégorisées
-              automatiquement. Votre tableau de bord vous attend.
+              Votre demande d'accès à <strong>{pendingName}</strong> a bien été transmise.
+              Un responsable doit la valider avant que vous puissiez voir les données.
             </p>
-
-            <div className="mx-auto mt-6 grid max-w-md grid-cols-3 gap-3">
-              {[
-                { v: "142", l: "transactions" },
-                { v: "9", l: "catégories" },
-                { v: "2", l: "comptes" },
-              ].map((s) => (
-                <div key={s.l} className="rounded-lg border bg-muted/30 p-3">
-                  <p className="text-xl font-bold">{s.v}</p>
-                  <p className="text-xs text-muted-foreground">{s.l}</p>
-                </div>
-              ))}
-            </div>
-
-            <Button asChild size="lg" className="mt-8 w-full sm:w-auto">
-              <Link href="/dashboard">
-                Accéder au tableau de bord
-                <ArrowRight className="h-4 w-4" />
-              </Link>
+            <Button variant="outline" className="mt-6" onClick={() => go("type")}>
+              <ArrowLeft className="h-4 w-4" />
+              Créer un espace à la place
             </Button>
           </Card>
         )}
       </main>
     </div>
+  );
+}
+
+function ChoiceCard({
+  icon,
+  title,
+  description,
+  onClick,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  description: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "flex flex-col items-start gap-3 rounded-xl border-2 border-border bg-background p-5 text-left transition-colors",
+        "hover:border-primary/60 hover:bg-primary/5"
+      )}
+    >
+      <span className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
+        {icon}
+      </span>
+      <span className="font-semibold">{title}</span>
+      <span className="text-sm text-muted-foreground">{description}</span>
+    </button>
+  );
+}
+
+function FormCard({
+  title,
+  description,
+  onBack,
+  error,
+  children,
+}: {
+  title: string;
+  description: string;
+  onBack: () => void;
+  error: string | null;
+  children: React.ReactNode;
+}) {
+  return (
+    <Card className="animate-fade-in p-8">
+      <BackButton onClick={onBack} />
+      <h1 className="mt-4 text-xl font-bold tracking-tight">{title}</h1>
+      <p className="mt-1 text-sm text-muted-foreground">{description}</p>
+      <div className="mt-6">{children}</div>
+      {error && <p className="mt-3 text-sm text-red-500">{error}</p>}
+    </Card>
+  );
+}
+
+function BackButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
+    >
+      <ArrowLeft className="h-4 w-4" />
+      Retour
+    </button>
   );
 }

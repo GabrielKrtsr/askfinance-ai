@@ -34,9 +34,14 @@ interface Budget {
 interface BudgetManagerProps {
   budgets: Budget[];
   categories: string[];
+  workspaceId: string;
 }
 
-export function BudgetManager({ budgets, categories }: BudgetManagerProps) {
+export function BudgetManager({
+  budgets,
+  categories,
+  workspaceId,
+}: BudgetManagerProps) {
   const router = useRouter();
   const [adding, setAdding] = useState(false);
   const [category, setCategory] = useState("");
@@ -56,20 +61,11 @@ export function BudgetManager({ budgets, categories }: BudgetManagerProps) {
 
     setSaving(true);
     const supabase = createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      toast.error("Vous devez être connecté.");
-      setSaving(false);
-      return;
-    }
-
     const { error } = await supabase
       .from("budgets")
       .upsert(
-        { user_id: user.id, category, amount: value },
-        { onConflict: "user_id,category" }
+        { workspace_id: workspaceId, category, amount: value },
+        { onConflict: "workspace_id,category" }
       );
     setSaving(false);
 
@@ -91,6 +87,7 @@ export function BudgetManager({ budgets, categories }: BudgetManagerProps) {
     const { error } = await supabase
       .from("budgets")
       .delete()
+      .eq("workspace_id", workspaceId)
       .eq("category", categorie);
     if (error) {
       toast.error("Suppression impossible", { description: error.message });

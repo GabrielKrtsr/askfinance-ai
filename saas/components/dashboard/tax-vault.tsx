@@ -43,7 +43,7 @@ const TYPE_DOT: Record<string, string> = {
   is: "bg-rose-500",
 };
 
-export function TaxVault() {
+export function TaxVault({ workspaceId }: { workspaceId: string }) {
   const router = useRouter();
   const [vault, setVault] = useState<TaxVaultData | null>(null);
   const [settings, setSettings] = useState<TaxSettings>(DEFAULT_TAX_SETTINGS);
@@ -54,7 +54,10 @@ export function TaxVault() {
 
   async function load() {
     try {
-      const [v, s] = await Promise.all([getTaxVault(), getTaxSettings()]);
+      const [v, s] = await Promise.all([
+        getTaxVault(workspaceId),
+        getTaxSettings(workspaceId),
+      ]);
       setVault(v);
       setSettings(s);
     } catch {
@@ -70,7 +73,7 @@ export function TaxVault() {
 
   async function handleSave() {
     setSaving(true);
-    const ok = await saveTaxSettings(settings);
+    const ok = await saveTaxSettings(workspaceId, settings);
     setSaving(false);
     if (!ok) {
       toast.error("Impossible d'enregistrer les réglages fiscaux.");

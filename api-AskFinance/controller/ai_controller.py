@@ -2,11 +2,15 @@
 from __future__ import annotations
 
 import json
+import time
+from collections import defaultdict
+from threading import Lock
 
 from fastapi import APIRouter, Header, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
+from controller.deps import require_member
 from services.ai.gemini_client import GeminiCallError, GeminiConfigurationError
 from services.ai.orchestrator import answer_financial_question, stream_financial_answer
 from services.ai.personas import PERSONAS
@@ -14,7 +18,6 @@ from services.supabase_service import (
     conversation_belongs_to_user,
     create_conversation,
     fetch_recent_messages,
-    get_user_id,
     insert_message,
 )
 
@@ -22,6 +25,27 @@ router = APIRouter()
 
 # Nombre de messages passés réinjectés comme contexte (fenêtre glissante).
 HISTORY_WINDOW = 10
+
+# Garde-fou anti-abus : chaque appel Gemini coûte. Fenêtre glissante en mémoire,
+# par utilisateur (best-effort : remis à zéro au redémarrage du process).
+RATE_LIMIT_WINDOW_SECONDS = 300
+RATE_LIMIT_MAX_REQUESTS = 20
+_rate_lock = Lock()
+_rate_hits: dict[str, list[float]] = defaultdict(list)
+
+
+def _check_rate_limit(user_id: str) -> None:
+    now = time.monotonic()
+    with _rate_lock:
+        hits = [t for t in _rate_hits[user_id] if now - t < RATE_LIMIT_WINDOW_SECONDS]
+        if len(hits) >= RATE_LIMIT_MAX_REQUESTS:
+            _rate_hits[user_id] = hits
+            raise HTTPException(
+                status_code=429,
+                detail="Trop de requêtes au copilote. Réessayez dans quelques minutes.",
+            )
+        hits.append(now)
+        _rate_hits[user_id] = hits
 
 
 class ChatRequest(BaseModel):
@@ -36,24 +60,19 @@ def _title_from(message: str) -> str:
     return title[:60] + ("…" if len(title) > 60 else "")
 
 
-def _resolve_conversation(user_id: str, message: str, conversation_id: str | None) -> str:
-    """Vérifie l'appartenance d'une conversation, ou en crée une neuve. Renvoie son id."""
+def _resolve_conversation(
+    workspace_id: str, user_id: str, message: str, conversation_id: str | None
+) -> str:
+    """Vérifie l'appartenance d'une conversation (utilisateur ET espace courant),
+    ou en crée une neuve. Renvoie son id."""
     if conversation_id:
-        if not conversation_belongs_to_user(conversation_id, user_id):
+        if not conversation_belongs_to_user(conversation_id, user_id, workspace_id):
             raise HTTPException(status_code=404, detail="Conversation introuvable.")
         return conversation_id
-    conversation = create_conversation(user_id, _title_from(message))
+    conversation = create_conversation(workspace_id, user_id, _title_from(message))
     if not conversation:
         raise HTTPException(status_code=500, detail="Impossible de créer la conversation.")
     return conversation["id"]
-
-
-def _user_id_or_401(authorization: str) -> str:
-    token = authorization.removeprefix("Bearer ").strip()
-    user_id = get_user_id(token) if token else None
-    if not user_id:
-        raise HTTPException(status_code=401, detail="Token invalide ou manquant.")
-    return user_id
 
 
 def _sse(event: str, data: dict) -> str:
@@ -75,17 +94,24 @@ def list_advisors():
 
 
 @router.post("/chat")
-def chat(payload: ChatRequest, authorization: str = Header(default="")):
+def chat(
+    payload: ChatRequest,
+    authorization: str = Header(default=""),
+    x_workspace_id: str = Header(default=""),
+):
     """Réponse complète (non-streaming) — repli si le front ne gère pas le SSE."""
-    user_id = _user_id_or_401(authorization)
+    user_id, workspace_id = require_member(authorization, x_workspace_id)
+    _check_rate_limit(user_id)
     message = payload.message.strip()
 
-    conversation_id = _resolve_conversation(user_id, message, payload.conversation_id)
+    conversation_id = _resolve_conversation(
+        workspace_id, user_id, message, payload.conversation_id
+    )
     history = fetch_recent_messages(conversation_id, HISTORY_WINDOW)
     insert_message(conversation_id, user_id, "user", message)
 
     try:
-        result = answer_financial_question(user_id, message, payload.advisor, history)
+        result = answer_financial_question(workspace_id, message, payload.advisor, history)
     except GeminiConfigurationError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except GeminiCallError as exc:
@@ -100,16 +126,19 @@ def chat(payload: ChatRequest, authorization: str = Header(default="")):
 
 
 @router.post("/chat/stream")
-def chat_stream(payload: ChatRequest, authorization: str = Header(default="")):
-    """Réponse en streaming (SSE) : étapes en cours + texte token-par-token.
-
-    Événements SSE émis : `meta` (conversation_id), `step` (libellé d'étape),
-    `token` (morceau de texte), `error`, `done`.
-    """
-    user_id = _user_id_or_401(authorization)
+def chat_stream(
+    payload: ChatRequest,
+    authorization: str = Header(default=""),
+    x_workspace_id: str = Header(default=""),
+):
+    """Réponse en streaming (SSE) : étapes en cours + texte token-par-token."""
+    user_id, workspace_id = require_member(authorization, x_workspace_id)
+    _check_rate_limit(user_id)
     message = payload.message.strip()
 
-    conversation_id = _resolve_conversation(user_id, message, payload.conversation_id)
+    conversation_id = _resolve_conversation(
+        workspace_id, user_id, message, payload.conversation_id
+    )
     history = fetch_recent_messages(conversation_id, HISTORY_WINDOW)
     insert_message(conversation_id, user_id, "user", message)
 
@@ -117,7 +146,7 @@ def chat_stream(payload: ChatRequest, authorization: str = Header(default="")):
         yield _sse("meta", {"conversation_id": conversation_id})
         parts: list[str] = []
         try:
-            for event in stream_financial_answer(user_id, message, payload.advisor, history):
+            for event in stream_financial_answer(workspace_id, message, payload.advisor, history):
                 kind = event["kind"]
                 if kind == "step":
                     yield _sse("step", {"label": event["label"]})

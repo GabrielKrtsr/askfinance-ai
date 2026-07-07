@@ -5,7 +5,6 @@ import {
   ChevronDown,
   ChevronsUpDown,
   ChevronUp,
-  Download,
   Search,
   SlidersHorizontal,
 } from "lucide-react";
@@ -22,13 +21,15 @@ import {
 } from "@/components/ui/select";
 import { cn, formatEUR } from "@/lib/utils";
 import type { TransactionRow } from "@/lib/data/transactions";
+import { ShareToGroupButton } from "@/components/dashboard/share-to-group";
 
 interface TransactionsTableProps {
   transactions: TransactionRow[];
   categories: string[];
+  groups?: { id: string; name: string }[];
 }
 
-type SortKey = "merchant" | "category" | "status" | "amount";
+type SortKey = "merchant" | "category" | "amount";
 
 function SortHeader({
   label,
@@ -75,6 +76,7 @@ function SortHeader({
 export function TransactionsTable({
   transactions,
   categories,
+  groups = [],
 }: TransactionsTableProps) {
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("all");
@@ -129,20 +131,11 @@ export function TransactionsTable({
 
   return (
     <div className="space-y-6">
-      {/* En-tête */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Transactions</h1>
-          <p className="text-sm text-muted-foreground">
-            {filtered.length} transaction{filtered.length > 1 ? "s" : ""}{" "}
-            affichée{filtered.length > 1 ? "s" : ""}
-          </p>
-        </div>
-        <Button variant="outline" size="sm">
-          <Download className="h-4 w-4" />
-          Exporter en CSV
-        </Button>
-      </div>
+      {/* Nombre de résultats (le titre de page est fourni par la page parente) */}
+      <p className="text-sm text-muted-foreground">
+        {filtered.length} transaction{filtered.length > 1 ? "s" : ""} affichée
+        {filtered.length > 1 ? "s" : ""}
+      </p>
 
       {/* Récap */}
       <div className="grid gap-4 sm:grid-cols-3">
@@ -265,14 +258,9 @@ export function TransactionsTable({
               onSort={toggleSort}
               className="w-40"
             />
-            <SortHeader
-              label="Statut"
-              column="status"
-              sortKey={sortKey}
-              sortDir={sortDir}
-              onSort={toggleSort}
-              className="w-28"
-            />
+            <div className="w-28 uppercase tracking-wider">
+              {groups.length > 0 ? "Groupe" : ""}
+            </div>
             <SortHeader
               label="Montant"
               column="amount"
@@ -311,11 +299,9 @@ export function TransactionsTable({
                     <Badge variant="muted">{t.category}</Badge>
                   </div>
                   <div className="md:w-28">
-                    <Badge
-                      variant={t.status === "Validé" ? "success" : "outline"}
-                    >
-                      {t.status}
-                    </Badge>
+                    {t.type === "debit" && groups.length > 0 ? (
+                      <ShareToGroupButton transactionId={t.id} groups={groups} />
+                    ) : null}
                   </div>
                   <span
                     className={cn(

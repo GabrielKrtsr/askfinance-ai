@@ -60,6 +60,7 @@ askfinance-ai/
 | `imports` | id, user_id, account_id, filename, count | un **lot d'import** (annulable) |
 | `transactions` | id, user_id, account_id, import_id, date, merchant, category, account, amount, type, status, is_transfer, fingerprint | voir ci-dessous |
 | `budgets` | id, user_id, category, amount | budget par catégorie |
+| `expected_receivables` | id, user_id, client, amount, due_date, note | échéancier des encaissements clients **déclarés** (RLS) ; rapprochés des crédits réels côté API |
 | `tax_settings` | id, user_id (unique), provision_tva_taux, provision_social_taux, provision_is_taux, tva_periodicite, urssaf_periodicite | coffre-fort fiscal : **taux de provision (% du CA)** + périodicités, paramétrés par l'utilisateur (RLS) |
 | `einvoice_checklist` | id, user_id, item_key, done, updated_at | checklist de préparation à la facture électronique (unique `(user_id, item_key)`, RLS) |
 | `conversations` | id, user_id, title, created_at, updated_at | une discussion du copilote IA (RLS) ; `updated_at` remonté par trigger à chaque message |
@@ -97,9 +98,12 @@ Le SQL de migration complet est dans l'historique ; refléter tout changement de
 - **Multi-compte** : comptes avec solde d'ouverture, vue par compte / consolidée.
 - **Virements internes** : exclus des KPIs/récurrents/prévision ; détectés via tag banque
   + appariement des 2 jambes (bouton « Détecter virements »).
-- **Radar des encaissements** (Python) : clustering des recettes **récurrentes** (mêmes
-  outils que les charges, mais sur les crédits) → détection des paiements clients en
-  **retard/manquants** + **brouillon de relance** prêt à copier (composant `receivables-radar`).
+- **Radar des encaissements** (déclaratif) : l'utilisateur **déclare** les virements
+  attendus (`expected_receivables` : client / montant / date prévue, CRUD front) ;
+  l'API **rapproche** chaque attendu des crédits réels (montant + fenêtre de date) →
+  statut **reçu / en retard / à venir** + **brouillon de relance**. Les attendus non
+  reçus **alimentent la prévision** (entrées). (Choix de Gabriel : modèle déclaratif,
+  on a abandonné l'inférence par clustering.)
 - **Coffre-fort fiscal** (Python) : provision recommandée (**% du CA** par poste TVA/URSSAF/IS)
   + **échéances estimées** (calendrier FR usuel) **injectées dans la prévision** → l'alerte
   découvert tient enfin compte des charges fiscales. Réglages par utilisateur (`tax_settings`).
@@ -123,6 +127,9 @@ Le SQL de migration complet est dans l'historique ; refléter tout changement de
   `api-AskFinance/Infrastructure/2026-06-28_features.sql` (tables `tax_settings` +
   `einvoice_checklist` + RLS). Sans elle, les modules Coffre-fort fiscal et Facture
   électronique tomberont en erreur/état vide.
+- **⚠️ Migration SQL à exécuter** (encaissements déclarés) :
+  `api-AskFinance/Infrastructure/2026-06-29_expected_receivables.sql` (table
+  `expected_receivables` + RLS). Sans elle, le Radar des encaissements sera vide.
 - **Déploiement** de l'API Python (Render/Railway) + CORS prod + `NEXT_PUBLIC_API_URL`.
 - Page **Comptes** dédiée ; filtre par compte + colonne compte sur la page Transactions.
 
@@ -180,6 +187,12 @@ npm run dev                 # .env.local : NEXT_PUBLIC_SUPABASE_URL / _ANON_KEY 
 | POST | `/ai/chat` | copilote IA Gemini (`message`, `advisor`, `conversation_id` optionnel) → `answer`, `advisor`, `conversation_id` |
 | POST | `/ai/chat/stream` | idem en **streaming SSE** → events `meta` / `step` / `token` / `error` / `done` |
 | GET | `/health` | santé |
+
+> **Synchro bancaire (reporté)** : la décision est prise d'utiliser
+> [Enable Banking](https://enablebanking.com) (gratuit en sandbox et en
+> « restricted production » ; Nordigen est fermé aux nouveaux inscrits) avec
+> une interface `BankProvider` abstraite côté FastAPI, mais l'implémentation
+> a été retirée le 2026-07-06 en attendant. Pour l'instant : import CSV.
 
 ---
 

@@ -48,52 +48,59 @@ const EMPTY_VAULT: TaxVault = {
   echeances: [],
 };
 
-// Récupère la synthèse du coffre-fort fiscal depuis l'API Python.
-export async function getTaxVault(): Promise<TaxVault> {
+// Récupère la synthèse du coffre-fort fiscal de l'espace courant.
+export async function getTaxVault(workspaceId: string): Promise<TaxVault> {
   const supabase = createClient();
   const {
     data: { session },
   } = await supabase.auth.getSession();
   const token = session?.access_token;
-  if (!token) return EMPTY_VAULT;
+  if (!token || !workspaceId) return EMPTY_VAULT;
 
   const res = await fetch(`${API_URL}/transactions/tax-vault`, {
-    headers: { Authorization: `Bearer ${token}` },
+    headers: { Authorization: `Bearer ${token}`, "X-Workspace-Id": workspaceId },
   });
   if (!res.ok) throw new Error("Échec du coffre-fort fiscal.");
   return res.json();
 }
 
-// Lit les réglages fiscaux de l'utilisateur (RLS), ou les valeurs par défaut.
-export async function getTaxSettings(): Promise<TaxSettings> {
+// Lit les réglages fiscaux de l'espace (colonnes DB anglaises, remap vers l'UI).
+export async function getTaxSettings(workspaceId: string): Promise<TaxSettings> {
   const supabase = createClient();
   const { data } = await supabase
     .from("tax_settings")
     .select(
-      "provision_tva_taux, provision_social_taux, provision_is_taux, tva_periodicite, urssaf_periodicite"
+      "vat_provision_rate, social_provision_rate, corporate_tax_provision_rate, vat_periodicity, urssaf_periodicity"
     )
+    .eq("workspace_id", workspaceId)
     .limit(1)
     .maybeSingle();
   if (!data) return DEFAULT_TAX_SETTINGS;
   return {
-    provision_tva_taux: Number(data.provision_tva_taux),
-    provision_social_taux: Number(data.provision_social_taux),
-    provision_is_taux: Number(data.provision_is_taux),
-    tva_periodicite: data.tva_periodicite,
-    urssaf_periodicite: data.urssaf_periodicite,
+    provision_tva_taux: Number(data.vat_provision_rate),
+    provision_social_taux: Number(data.social_provision_rate),
+    provision_is_taux: Number(data.corporate_tax_provision_rate),
+    tva_periodicite: data.vat_periodicity,
+    urssaf_periodicite: data.urssaf_periodicity,
   };
 }
 
-// Enregistre (upsert) les réglages fiscaux de l'utilisateur connecté.
-export async function saveTaxSettings(settings: TaxSettings): Promise<boolean> {
+// Enregistre (upsert) les réglages fiscaux de l'espace.
+export async function saveTaxSettings(
+  workspaceId: string,
+  settings: TaxSettings
+): Promise<boolean> {
   const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return false;
-
-  const { error } = await supabase
-    .from("tax_settings")
-    .upsert({ user_id: user.id, ...settings }, { onConflict: "user_id" });
+  const { error } = await supabase.from("tax_settings").upsert(
+    {
+      workspace_id: workspaceId,
+      vat_provision_rate: settings.provision_tva_taux,
+      social_provision_rate: settings.provision_social_taux,
+      corporate_tax_provision_rate: settings.provision_is_taux,
+      vat_periodicity: settings.tva_periodicite,
+      urssaf_periodicity: settings.urssaf_periodicite,
+    },
+    { onConflict: "workspace_id" }
+  );
   return !error;
 }

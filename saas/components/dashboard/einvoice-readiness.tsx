@@ -68,21 +68,21 @@ function Countdown({ label, target }: { label: string; target: Date }) {
   );
 }
 
-export function EInvoiceReadiness() {
+export function EInvoiceReadiness({ workspaceId }: { workspaceId: string }) {
   const [state, setState] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    getEInvoiceChecklist()
+    getEInvoiceChecklist(workspaceId)
       .then(setState)
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, []);
+  }, [workspaceId]);
 
   async function toggle(key: string) {
     const next = !state[key];
     setState((s) => ({ ...s, [key]: next })); // optimiste
-    const ok = await toggleEInvoiceItem(key, next);
+    const ok = await toggleEInvoiceItem(workspaceId, key, next);
     if (!ok) {
       setState((s) => ({ ...s, [key]: !next })); // revert
       toast.error("Impossible d'enregistrer. Réessayez.");

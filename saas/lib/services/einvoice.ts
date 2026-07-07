@@ -1,11 +1,14 @@
 import { createClient } from "@/lib/supabase/client";
 
-// Récupère l'état de la checklist de préparation (clé item -> coché).
-export async function getEInvoiceChecklist(): Promise<Record<string, boolean>> {
+// Récupère l'état de la checklist de préparation de l'espace (clé item -> coché).
+export async function getEInvoiceChecklist(
+  workspaceId: string
+): Promise<Record<string, boolean>> {
   const supabase = createClient();
   const { data } = await supabase
     .from("einvoice_checklist")
-    .select("item_key, done");
+    .select("item_key, done")
+    .eq("workspace_id", workspaceId);
   const map: Record<string, boolean> = {};
   for (const row of data ?? []) {
     map[(row as { item_key: string }).item_key] = Boolean(
@@ -15,25 +18,20 @@ export async function getEInvoiceChecklist(): Promise<Record<string, boolean>> {
   return map;
 }
 
-// Coche / décoche un item (upsert sur user_id + item_key).
+// Coche / décoche un item (upsert sur workspace_id + item_key).
 export async function toggleEInvoiceItem(
+  workspaceId: string,
   itemKey: string,
   done: boolean
 ): Promise<boolean> {
   const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return false;
-
   const { error } = await supabase.from("einvoice_checklist").upsert(
     {
-      user_id: user.id,
+      workspace_id: workspaceId,
       item_key: itemKey,
       done,
-      updated_at: new Date().toISOString(),
     },
-    { onConflict: "user_id,item_key" }
+    { onConflict: "workspace_id,item_key" }
   );
   return !error;
 }

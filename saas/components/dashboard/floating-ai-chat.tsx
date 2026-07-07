@@ -217,7 +217,13 @@ function TypingIndicator({ label }: { label: string }) {
   );
 }
 
-export function FloatingAiChat({ userInitials }: { userInitials: string }) {
+export function FloatingAiChat({
+  userInitials,
+  workspaceId,
+}: {
+  userInitials: string;
+  workspaceId: string;
+}) {
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
@@ -244,7 +250,7 @@ export function FloatingAiChat({ userInitials }: { userInitials: string }) {
   useEffect(() => {
     if (!open) return;
     let active = true;
-    getConversations()
+    getConversations(workspaceId)
       .then((items) => active && setConversations(items))
       .catch(() => active && setConversations([]));
     return () => {
@@ -263,7 +269,7 @@ export function FloatingAiChat({ userInitials }: { userInitials: string }) {
 
   async function refreshConversations() {
     try {
-      setConversations(await getConversations());
+      setConversations(await getConversations(workspaceId));
     } catch {
       /* liste laissée en l'état */
     }
@@ -294,7 +300,7 @@ export function FloatingAiChat({ userInitials }: { userInitials: string }) {
     let assistantId: string | null = null;
 
     try {
-      await streamAiChatMessage(trimmed, advisor, conversationId, {
+      await streamAiChatMessage(trimmed, advisor, conversationId, workspaceId, {
         onMeta: (cid) => setConversationId(cid),
         onStep: (label) => setStepLabel(label),
         onToken: (token) => {

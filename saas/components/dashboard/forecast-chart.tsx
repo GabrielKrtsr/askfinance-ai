@@ -27,17 +27,17 @@ import { getForecast, type ForecastResult } from "@/lib/services/forecast";
 const axisAmount = (v: number) =>
   Math.abs(v) >= 1000 ? `${(v / 1000).toFixed(1)}k` : `${Math.round(v)}`;
 
-export function ForecastChart() {
+export function ForecastChart({ workspaceId }: { workspaceId: string }) {
   const [data, setData] = useState<ForecastResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
   useEffect(() => {
-    getForecast()
+    getForecast(workspaceId)
       .then(setData)
       .catch(() => setError(true))
       .finally(() => setLoading(false));
-  }, []);
+  }, [workspaceId]);
 
   const message = loading
     ? "Calcul de la prévision…"

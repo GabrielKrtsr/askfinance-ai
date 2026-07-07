@@ -1,7 +1,9 @@
 import { cache } from "react";
 
 import { createClient } from "@/lib/supabase/server";
+import { getCurrentWorkspace, type WorkspaceType } from "@/lib/data/workspace";
 import { formatEUR, formatDateFr } from "@/lib/utils";
+import { type TFunc } from "@/lib/i18n/core";
 
 // ---------- Types exposés à l'UI ----------
 
@@ -94,16 +96,6 @@ interface DbAccount {
 
 // ---------- Constantes ----------
 
-const MOIS_FR = [
-  "Janv.", "Févr.", "Mars", "Avr.", "Mai", "Juin",
-  "Juil.", "Août", "Sept.", "Oct.", "Nov.", "Déc.",
-];
-
-const MOIS_FULL = [
-  "Janvier", "Février", "Mars", "Avril", "Mai", "Juin",
-  "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre",
-];
-
 const COULEURS = [
   "#4f46e5", "#14b8a6", "#6366f1", "#0ea5e9", "#f59e0b",
   "#ec4899", "#8b5cf6", "#10b981", "#ef4444", "#f97316",
@@ -115,14 +107,26 @@ function monthKey(iso: string): string {
   return iso.slice(0, 7); // "AAAA-MM"
 }
 
-function moisLabel(key: string): string {
-  const m = Number(key.slice(5, 7));
-  return MOIS_FR[m - 1] ?? key;
+// Libellés de mois localisés via Intl (fr/en/uk…) à partir de la clé "AAAA-MM".
+function moisLabel(key: string, locale = "fr"): string {
+  const [y, m] = key.split("-").map(Number);
+  const d = new Date(Date.UTC(y, m - 1, 1));
+  const s = new Intl.DateTimeFormat(locale, {
+    month: "short",
+    timeZone: "UTC",
+  }).format(d);
+  return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
-function monthFullLabel(key: string): string {
+function monthFullLabel(key: string, locale = "fr"): string {
   const [y, m] = key.split("-").map(Number);
-  return `${MOIS_FULL[m - 1] ?? key} ${y}`;
+  const d = new Date(Date.UTC(y, m - 1, 1));
+  const s = new Intl.DateTimeFormat(locale, {
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(d);
+  return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
 function previousMonthKey(key: string): string {
@@ -148,27 +152,52 @@ function buildKpi(
   label: string,
   value: string,
   deltaPct: number | null,
-  lowerIsBetter = false // true pour les dépenses : baisser est positif
+  opts: { lowerIsBetter?: boolean; hint?: string } = {}
 ): Kpi {
   if (deltaPct === null) {
     return { label, value, delta: "—", trend: "up", positive: true, hint: "" };
   }
+  const lowerIsBetter = opts.lowerIsBetter ?? false; // true pour les dépenses
   return {
     label,
     value,
     delta: formatDelta(deltaPct),
     trend: deltaPct >= 0 ? "up" : "down",
     positive: lowerIsBetter ? deltaPct <= 0 : deltaPct >= 0,
-    hint: "vs mois dernier",
+    hint: opts.hint ?? "vs mois dernier",
   };
 }
 
-function emptyKpis(opening = 0): Kpi[] {
+interface KpiLabels {
+  balance: string;
+  expenses: string;
+  revenue: string;
+  margin: string;
+  remaining: string;
+  hint: string;
+}
+
+const FR_LABELS: KpiLabels = {
+  balance: "Solde de trésorerie",
+  expenses: "Dépenses du mois",
+  revenue: "Revenus du mois",
+  margin: "Marge nette",
+  remaining: "Reste à vivre",
+  hint: "vs mois dernier",
+};
+
+function emptyKpis(
+  opening = 0,
+  labels: KpiLabels = FR_LABELS,
+  kind: WorkspaceType = "business"
+): Kpi[] {
   return [
-    buildKpi("Solde de trésorerie", formatEUR(opening), null),
-    buildKpi("Dépenses du mois", formatEUR(0), null),
-    buildKpi("Revenus du mois", formatEUR(0), null),
-    buildKpi("Marge nette", "0 %", null),
+    buildKpi(labels.balance, formatEUR(opening), null),
+    buildKpi(labels.expenses, formatEUR(0), null),
+    buildKpi(labels.revenue, formatEUR(0), null),
+    kind === "personal"
+      ? buildKpi(labels.remaining, formatEUR(0), null)
+      : buildKpi(labels.margin, "0 %", null),
   ];
 }
 
@@ -216,14 +245,48 @@ export const getProfile = cache(async (): Promise<Profile | null> => {
 
 export async function getDashboardData(
   selectedMonth?: string,
-  selectedAccount?: string
+  selectedAccount?: string,
+  i18n?: { t: TFunc; locale: string },
+  kind: WorkspaceType = "business"
 ): Promise<DashboardData> {
   const supabase = createClient();
+  const locale = i18n?.locale ?? "fr";
+  const labels: KpiLabels = i18n
+    ? {
+        balance: i18n.t(
+          kind === "personal" ? "dashboard.kpiBalancePerso" : "dashboard.kpiBalance"
+        ),
+        expenses: i18n.t("dashboard.kpiExpenses"),
+        revenue: i18n.t("dashboard.kpiRevenue"),
+        margin: i18n.t("dashboard.kpiMargin"),
+        remaining: i18n.t("dashboard.kpiRemaining"),
+        hint: i18n.t("dashboard.vsLastMonth"),
+      }
+    : FR_LABELS;
 
-  // Comptes de l'utilisateur (pour le sélecteur + soldes d'ouverture).
+  // Aucun espace courant → tableau de bord vide.
+  const workspace = await getCurrentWorkspace();
+  if (!workspace) {
+    return {
+      kpis: emptyKpis(0, labels, kind),
+      cashflow: [],
+      categories: [],
+      budgets: [],
+      recent: [],
+      availableCategories: [],
+      months: [],
+      selectedMonth: "",
+      accounts: [],
+      selectedAccount: "all",
+      hasData: false,
+    };
+  }
+
+  // Comptes de l'espace (pour le sélecteur + soldes d'ouverture).
   const { data: accountRows } = await supabase
     .from("accounts")
     .select("id, name, opening_balance")
+    .eq("workspace_id", workspace.id)
     .order("created_at", { ascending: true });
   const accountsData = (accountRows ?? []) as DbAccount[];
   const accounts: AccountOption[] = accountsData.map((a) => ({
@@ -251,20 +314,40 @@ export async function getDashboardData(
   let query = supabase
     .from("transactions")
     .select(
-      "id, date, merchant, category, account, amount, type, status, is_transfer, account_id"
+      "id, date, label, category, amount, direction, status, is_transfer, account_id"
     )
+    .eq("workspace_id", workspace.id)
     .order("date", { ascending: false });
   if (accountFilter !== "all") query = query.eq("account_id", accountFilter);
   const { data, error } = await query;
 
-  const txns: DbTransaction[] = (data ?? []).map((t) => ({
-    ...(t as DbTransaction),
-    amount: Number((t as DbTransaction).amount), // numeric → number
+  interface TxRow {
+    id: string;
+    date: string;
+    label: string;
+    category: string;
+    amount: number;
+    direction: "debit" | "credit";
+    status: string;
+    is_transfer: boolean;
+    account_id: string | null;
+  }
+  const txns: DbTransaction[] = ((data ?? []) as unknown as TxRow[]).map((t) => ({
+    id: t.id,
+    date: t.date,
+    merchant: t.label,
+    category: t.category,
+    account: null,
+    amount: Number(t.amount), // numeric → number
+    type: t.direction,
+    status: t.status,
+    is_transfer: t.is_transfer,
+    account_id: t.account_id,
   }));
 
   if (error || txns.length === 0) {
     return {
-      kpis: emptyKpis(openingTotal),
+      kpis: emptyKpis(openingTotal, labels, kind),
       cashflow: [],
       categories: [],
       budgets: [],
@@ -288,7 +371,7 @@ export async function getDashboardData(
   );
   const months: MonthOption[] = monthKeys.map((k) => ({
     value: k,
-    label: monthFullLabel(k),
+    label: monthFullLabel(k, locale),
   }));
 
   // Mois de référence = celui demandé (s'il existe en base), sinon le plus récent.
@@ -317,10 +400,19 @@ export async function getDashboardData(
   const margePrev = revPrev > 0 ? ((revPrev - depPrev) / revPrev) * 100 : 0;
 
   const kpis: Kpi[] = [
-    buildKpi("Solde de trésorerie", formatEUR(solde), null),
-    buildKpi("Dépenses du mois", formatEUR(depMois), depPrev > 0 ? ((depMois - depPrev) / depPrev) * 100 : null, true),
-    buildKpi("Revenus du mois", formatEUR(revMois), revPrev > 0 ? ((revMois - revPrev) / revPrev) * 100 : null),
-    buildKpi("Marge nette", `${marge.toFixed(1).replace(".", ",")} %`, revPrev > 0 ? marge - margePrev : null),
+    buildKpi(labels.balance, formatEUR(solde), null),
+    buildKpi(labels.expenses, formatEUR(depMois), depPrev > 0 ? ((depMois - depPrev) / depPrev) * 100 : null, { lowerIsBetter: true, hint: labels.hint }),
+    buildKpi(labels.revenue, formatEUR(revMois), revPrev > 0 ? ((revMois - revPrev) / revPrev) * 100 : null, { hint: labels.hint }),
+    kind === "personal"
+      ? buildKpi(
+          labels.remaining,
+          formatEUR(revMois - depMois),
+          revPrev - depPrev !== 0
+            ? ((revMois - depMois - (revPrev - depPrev)) / Math.abs(revPrev - depPrev)) * 100
+            : null,
+          { hint: labels.hint }
+        )
+      : buildKpi(labels.margin, `${marge.toFixed(1).replace(".", ",")} %`, revPrev > 0 ? marge - margePrev : null, { hint: labels.hint }),
   ];
 
   // Flux de trésorerie : par mois, 12 plus récents, ordre chronologique (hors virements).
@@ -335,7 +427,7 @@ export async function getDashboardData(
   const cashflow: CashflowPoint[] = Array.from(parMois.entries())
     .sort(([a], [b]) => a.localeCompare(b))
     .slice(-12)
-    .map(([k, v]) => ({ mois: moisLabel(k), revenus: v.revenus, depenses: v.depenses }));
+    .map(([k, v]) => ({ mois: moisLabel(k, locale), revenus: v.revenus, depenses: v.depenses }));
 
   // Répartition des dépenses du mois de référence par catégorie (hors virements).
   const parCat = new Map<string, number>();
@@ -355,7 +447,8 @@ export async function getDashboardData(
   // Budgets fixés (table budgets) + dépense réelle calculée.
   const { data: budgetRows } = await supabase
     .from("budgets")
-    .select("category, amount");
+    .select("category, amount")
+    .eq("workspace_id", workspace.id);
   const budgets: BudgetRow[] = (budgetRows ?? []).map((b) => ({
     categorie: (b as { category: string }).category,
     budget: Number((b as { amount: number }).amount),

@@ -1,9 +1,11 @@
 import Link from "next/link";
-import { ArrowDownRight, ArrowUpRight, Download, Sparkles } from "lucide-react";
+import { redirect } from "next/navigation";
+import { ArrowDownRight, ArrowUpRight, Sparkles } from "lucide-react";
 
 import { getDashboardData, getProfile } from "@/lib/data/dashboard";
+import { getCurrentWorkspace, getWorkspaces } from "@/lib/data/workspace";
+import { getT } from "@/lib/i18n/server";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import {
   Card,
   CardContent,
@@ -11,20 +13,14 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { CashflowChart } from "@/components/dashboard/cashflow-chart";
 import { CategoryChart } from "@/components/dashboard/category-chart";
 import { ImportDialog } from "@/components/dashboard/import-dialog";
-import { BudgetManager } from "@/components/dashboard/budget-manager";
-import { RecurringCharges } from "@/components/dashboard/recurring-charges";
-import { ForecastChart } from "@/components/dashboard/forecast-chart";
-import { ReceivablesRadar } from "@/components/dashboard/receivables-radar";
-import { TaxVault } from "@/components/dashboard/tax-vault";
-import { EInvoiceReadiness } from "@/components/dashboard/einvoice-readiness";
 import { MonthSelect } from "@/components/dashboard/month-select";
 import { AccountSwitcher } from "@/components/dashboard/account-switcher";
 import { DetectTransfersButton } from "@/components/dashboard/detect-transfers-button";
 import { OpenAiChatButton } from "@/components/dashboard/open-ai-chat-button";
-import { cn, formatEUR } from "@/lib/utils";
+import { RecentTransactions } from "@/components/dashboard/recent-transactions";
+import { cn } from "@/lib/utils";
 
 function EmptyState({ children }: { children: React.ReactNode }) {
   return (
@@ -39,9 +35,22 @@ export default async function DashboardPage({
 }: {
   searchParams: { month?: string; account?: string };
 }) {
+  // Un groupe n'a pas de dashboard bancaire : son accueil = les dépenses partagées.
+  const workspace = await getCurrentWorkspace();
+  if (workspace?.type === "group") redirect("/dashboard/shared");
+
+  const isPerso = workspace?.type === "personal";
+  const kind = workspace?.type ?? "business";
+
+  // Groupes de l'utilisateur (pour cliquer une transaction → l'ajouter à un groupe).
+  const groups = (await getWorkspaces())
+    .filter((w) => w.type === "group")
+    .map((w) => ({ id: w.id, name: w.name }));
+
+  const { t, locale } = getT();
   const [profile, data] = await Promise.all([
     getProfile(),
-    getDashboardData(searchParams.month, searchParams.account),
+    getDashboardData(searchParams.month, searchParams.account, { t, locale }, kind),
   ]);
   const firstName = profile?.firstName || profile?.fullName || "";
   const monthLabel = data.months.find(
@@ -54,11 +63,14 @@ export default async function DashboardPage({
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">
-            Bonjour{firstName ? `, ${firstName}` : ""} 👋
+            {firstName
+              ? t("dashboard.greetingName", { name: firstName })
+              : t("dashboard.greeting")}
           </h1>
           <p className="text-sm text-muted-foreground">
-            Voici l'état de vos finances
-            {monthLabel ? ` — ${monthLabel}` : ""}.
+            {monthLabel
+              ? t("dashboard.subtitle", { month: monthLabel })
+              : t("dashboard.subtitleNoMonth")}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -69,11 +81,8 @@ export default async function DashboardPage({
           {data.months.length > 0 && (
             <MonthSelect months={data.months} selected={data.selectedMonth} />
           )}
-          <DetectTransfersButton />
-          <Button variant="outline" size="sm">
-            <Download className="h-4 w-4" />
-            Exporter
-          </Button>
+          {/* Outil technique réservé au pro (un particulier n'en a pas besoin). */}
+          {!isPerso && <DetectTransfersButton workspaceId={workspace?.id ?? ""} />}
           <ImportDialog />
         </div>
       </div>
@@ -114,149 +123,81 @@ export default async function DashboardPage({
         ))}
       </div>
 
-      {/* Trésorerie prévisionnelle */}
-      <ForecastChart />
-
-      {/* Récupérer le cash (encaissements) + ne pas être surpris (fiscal) */}
-      <div className="grid gap-4 lg:grid-cols-2">
-        <ReceivablesRadar />
-        <TaxVault />
-      </div>
-
-      {/* Graphiques */}
-      <div className="grid gap-4 lg:grid-cols-5">
-        <Card className="lg:col-span-3">
-          <CardHeader className="flex-row items-center justify-between space-y-0">
-            <div>
-              <CardTitle>Flux de trésorerie</CardTitle>
-              <CardDescription>Revenus vs dépenses · 12 mois</CardDescription>
-            </div>
-            <div className="flex items-center gap-4 text-xs">
-              <span className="flex items-center gap-1.5">
-                <span className="h-2.5 w-2.5 rounded-full bg-primary" />
-                Revenus
-              </span>
-              <span className="flex items-center gap-1.5">
-                <span className="h-2.5 w-2.5 rounded-full bg-teal" />
-                Dépenses
-              </span>
-            </div>
-          </CardHeader>
-          <CardContent>
-            {data.cashflow.length > 0 ? (
-              <CashflowChart data={data.cashflow} />
-            ) : (
-              <EmptyState>
-                Aucune donnée à afficher. Importez un relevé pour voir vos flux.
-              </EmptyState>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card className="lg:col-span-2">
-          <CardHeader>
-            <CardTitle>Dépenses par catégorie</CardTitle>
-            <CardDescription>{monthLabel ?? "Mois en cours"}</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {data.categories.length > 0 ? (
-              <CategoryChart data={data.categories} />
-            ) : (
-              <EmptyState>Aucune dépense ce mois-ci.</EmptyState>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Budgets + Copilote */}
-      <div className="grid gap-4 lg:grid-cols-3">
-        <BudgetManager
-          budgets={data.budgets}
-          categories={data.availableCategories}
-        />
-
-        <Card className="flex flex-col bg-gradient-to-br from-primary to-teal text-white">
-          <CardHeader>
-            <Sparkles className="h-6 w-6" />
-            <CardTitle className="text-white">Copilote IA</CardTitle>
-            <CardDescription className="text-white/80">
-              Une question sur vos finances ?
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="flex flex-1 flex-col justify-end">
-            <p className="text-sm text-white/90">
-              Posez vos questions et obtenez des analyses sur mesure.
-            </p>
-            <OpenAiChatButton />
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Charges récurrentes */}
-      <RecurringCharges />
-
-      {/* Préparation à la facture électronique 2026/2027 */}
-      <EInvoiceReadiness />
-
-      {/* Transactions récentes */}
+      {/* Évolution (vue d'ensemble dans le temps) */}
       <Card>
         <CardHeader className="flex-row items-center justify-between space-y-0">
           <div>
-            <CardTitle>Transactions récentes</CardTitle>
-            <CardDescription>Les 6 derniers mouvements</CardDescription>
+            <CardTitle>{t("dashboard.categoryTitle")}</CardTitle>
+            <CardDescription>
+              {monthLabel ?? t("dashboard.thisMonth")}
+            </CardDescription>
           </div>
-          <Button asChild variant="ghost" size="sm">
-            <Link href="/dashboard/transactions">Tout voir</Link>
-          </Button>
         </CardHeader>
-        <CardContent className="p-0">
-          {data.recent.length > 0 ? (
-            <ul className="divide-y">
-              {data.recent.map((t) => (
-                <li
-                  key={t.id}
-                  className="flex items-center gap-4 px-6 py-3.5 transition-colors hover:bg-muted/40"
-                >
-                  <span
-                    className={cn(
-                      "flex h-9 w-9 shrink-0 items-center justify-center rounded-full",
-                      t.type === "credit"
-                        ? "bg-emerald-50 text-emerald-600"
-                        : "bg-muted text-muted-foreground"
-                    )}
-                  >
-                    {t.type === "credit" ? (
-                      <ArrowDownRight className="h-4 w-4" />
-                    ) : (
-                      <ArrowUpRight className="h-4 w-4" />
-                    )}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium">{t.merchant}</p>
-                    <p className="text-xs text-muted-foreground">{t.dateLabel}</p>
-                  </div>
-                  <Badge variant="muted" className="hidden sm:inline-flex">
-                    {t.category}
-                  </Badge>
-                  <span
-                    className={cn(
-                      "w-24 text-right text-sm font-semibold tabular-nums",
-                      t.type === "credit" ? "text-emerald-600" : "text-foreground"
-                    )}
-                  >
-                    {t.type === "credit" ? "+" : ""}
-                    {formatEUR(t.amount)}
-                  </span>
-                </li>
-              ))}
-            </ul>
+        <CardContent>
+          {data.categories.length > 0 ? (
+            <CategoryChart data={data.categories} />
           ) : (
-            <p className="px-6 py-10 text-center text-sm text-muted-foreground">
-              Aucune transaction. Importez un relevé pour commencer.
-            </p>
+            <EmptyState>{t("dashboard.noExpenses")}</EmptyState>
           )}
         </CardContent>
       </Card>
+
+      {isPerso ? (
+        /* Perso : transactions récentes (cliquables → groupe), pleine largeur. */
+        <Card>
+          <CardHeader className="flex-row items-center justify-between space-y-0">
+            <div>
+              <CardTitle>{t("dashboard.recentTitle")}</CardTitle>
+              <CardDescription>{t("dashboard.recentDesc")}</CardDescription>
+            </div>
+            <Button asChild variant="ghost" size="sm">
+              <Link href="/dashboard/transactions">{t("common.seeAll")}</Link>
+            </Button>
+          </CardHeader>
+          <CardContent className="p-0">
+            <RecentTransactions items={data.recent} groups={groups} />
+          </CardContent>
+        </Card>
+      ) : (
+        /* Pro : répartition par catégorie + récentes + copilote. */
+        <>
+          <div className="grid gap-4">
+            <Card>
+              <CardHeader className="flex-row items-center justify-between space-y-0">
+                <div>
+                  <CardTitle>{t("dashboard.recentTitle")}</CardTitle>
+                  <CardDescription>{t("dashboard.recentDesc")}</CardDescription>
+                </div>
+                <Button asChild variant="ghost" size="sm">
+                  <Link href="/dashboard/transactions">
+                    {t("common.seeAll")}
+                  </Link>
+                </Button>
+              </CardHeader>
+              <CardContent className="p-0">
+                <RecentTransactions items={data.recent} groups={groups} />
+              </CardContent>
+            </Card>
+
+          </div>
+
+          <Card className="flex flex-col bg-gradient-to-br from-primary to-teal text-white">
+            <CardHeader>
+              <Sparkles className="h-6 w-6" />
+              <CardTitle className="text-white">
+                {t("dashboard.copilotTitle")}
+              </CardTitle>
+              <CardDescription className="text-white/80">
+                {t("dashboard.copilotSubtitle")}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-1 flex-col justify-end">
+              <p className="text-sm text-white/90">{t("dashboard.copilotBody")}</p>
+              <OpenAiChatButton />
+            </CardContent>
+          </Card>
+        </>
+      )}
     </div>
   );
 }

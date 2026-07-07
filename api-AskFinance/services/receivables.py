@@ -1,27 +1,36 @@
-"""Radar des encaissements : recettes récurrentes (clients réguliers) et
-détection des paiements attendus en retard ou manquants.
+"""Échéancier des encaissements clients (déclaratif) + rapprochement bancaire.
 
-Même logique de clustering que `recurring.py`, mais appliquée aux **crédits**
-(encaissements clients) au lieu des débits. L'idée : un client qui versait
-~X € à intervalle régulier et dont le versement n'est pas arrivé à la date
-attendue = un encaissement en retard → on propose une relance.
+L'utilisateur déclare les virements qu'il attend (client, montant, date prévue) ;
+on rapproche ensuite chaque attendu des crédits réellement reçus sur les relevés :
+- un crédit du bon montant arrive autour de la date prévue → « reçu » ;
+- la date prévue est dépassée et rien n'est arrivé → « en retard » (+ brouillon de relance) ;
+- sinon → « à venir ».
 """
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 
-import pandas as pd
+from services.recurring import merchant_key
 
-from services.recurring import _frequency, merchant_key
+# Tolérance avant de déclarer un encaissement en retard (jours après la date prévue).
+GRACE_DAYS = 3
+# Fenêtre de rapprochement autour de la date prévue (jours avant / après).
+MATCH_BEFORE = 7
+MATCH_AFTER = 60
 
-# Au-delà de ce délai après la date attendue, on considère le client comme
-# « inactif » (il a sans doute cessé de payer) et on ne le signale plus en retard.
-_INACTIF_FACTEUR = 3.0
+
+def _to_date(value) -> date | None:
+    try:
+        return datetime.fromisoformat(str(value)[:10]).date()
+    except (TypeError, ValueError):
+        return None
 
 
-def _grace_days(median: float) -> int:
-    """Tolérance avant de déclarer un encaissement en retard (jours)."""
-    return max(5, round(median * 0.3))
+def _to_float(value) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return 0.0
 
 
 def _relance_text(client: str, montant: float, jours_retard: int) -> str:
@@ -31,114 +40,116 @@ def _relance_text(client: str, montant: float, jours_retard: int) -> str:
         f"Objet : Relance — règlement en attente\n\n"
         f"Bonjour,\n\n"
         f"Sauf erreur de notre part, nous n'avons pas encore reçu votre "
-        f"règlement habituel d'environ {montant_fr}, attendu depuis "
-        f"{jours_retard} jour(s).\n\n"
+        f"règlement de {montant_fr}, attendu depuis {jours_retard} jour(s).\n\n"
         f"Pourriez-vous nous indiquer la date de paiement prévue ? Si le "
         f"règlement a déjà été effectué, merci de ne pas tenir compte de ce "
         f"message.\n\n"
-        f"Restant à votre disposition,\n"
         f"Cordialement."
     )
 
 
-def detect_receivables(
-    transactions: list[dict],
-    today: date | None = None,
-    min_occurrences: int = 3,
-) -> dict:
-    """Analyse les encaissements et renvoie les recettes récurrentes détectées,
-    avec leur statut (à jour / en retard) au regard de la date du jour."""
+def _credits(transactions: list[dict]) -> list[dict]:
+    """Liste des crédits réels (hors virements internes), triés par date."""
+    rows = []
+    for t in transactions:
+        if t.get("type") != "credit" or bool(t.get("is_transfer")):
+            continue
+        d = _to_date(t.get("date"))
+        if d is None:
+            continue
+        rows.append({
+            "date": d,
+            "amount": abs(_to_float(t.get("amount"))),
+            "key": merchant_key(str(t.get("merchant") or "")),
+        })
+    rows.sort(key=lambda c: c["date"])
+    return rows
+
+
+def _find_match(credits: list[dict], used: set[int], amount: float, due: date, client_key: str):
+    """Cherche le meilleur crédit non encore apparié : bon montant, dans la fenêtre de
+    date, en préférant un libellé qui correspond au client puis la date la plus proche."""
+    best_idx = None
+    best_score = None
+    for i, c in enumerate(credits):
+        if i in used:
+            continue
+        if abs(c["amount"] - amount) > max(1.0, amount * 0.01):
+            continue
+        delta = (c["date"] - due).days
+        if delta < -MATCH_BEFORE or delta > MATCH_AFTER:
+            continue
+        key_match = 1 if (client_key and c["key"] and (client_key in c["key"] or c["key"] in client_key)) else 0
+        score = (key_match, -abs(delta))
+        if best_score is None or score > best_score:
+            best_score = score
+            best_idx = i
+    return best_idx
+
+
+def reconcile_receivables(expected: list[dict], transactions: list[dict], today: date | None = None) -> dict:
+    """Rapproche les encaissements attendus (déclarés) des crédits réellement reçus."""
     today = today or date.today()
-    if not transactions:
-        return {"recettes": [], "en_retard": [], "total_attendu_mensuel": 0.0}
+    credits = _credits(transactions)
+    used: set[int] = set()
+    rows: list[dict] = []
 
-    df = pd.DataFrame(transactions)
-    if "is_transfer" in df.columns:  # on ignore les virements internes
-        df = df[~df["is_transfer"].fillna(False).astype(bool)]
-    df = df[df["type"] == "credit"].copy()
-    if df.empty:
-        return {"recettes": [], "en_retard": [], "total_attendu_mensuel": 0.0}
+    for e in sorted(expected, key=lambda x: str(x.get("due_date") or "")):
+        due = _to_date(e.get("due_date"))
+        amount = abs(_to_float(e.get("amount")))
+        client = str(e.get("client") or "")
+        idx = _find_match(credits, used, amount, due, merchant_key(client)) if due else None
 
-    df["date"] = pd.to_datetime(df["date"], errors="coerce")
-    df["amount"] = pd.to_numeric(df["amount"], errors="coerce").abs()
-    df = df.dropna(subset=["date", "amount"])
-    df["key"] = df["merchant"].apply(merchant_key)
-    df = df[df["key"] != ""]
+        if idx is not None:
+            used.add(idx)
+            statut, jours_retard = "received", 0
+            date_recu = credits[idx]["date"].strftime("%Y-%m-%d")
+            relance = None
+        elif due and (today - due).days > GRACE_DAYS:
+            statut = "late"
+            jours_retard = (today - due).days
+            date_recu = None
+            relance = _relance_text(client, amount, jours_retard)
+        else:
+            statut, jours_retard, date_recu, relance = "upcoming", 0, None, None
 
-    now = pd.Timestamp(today)
-    recettes: list[dict] = []
+        rows.append({
+            "id": e.get("id"),
+            "client": client,
+            "montant_attendu": round(amount, 2),
+            "date_prevue": due.strftime("%Y-%m-%d") if due else None,
+            "statut": statut,
+            "jours_retard": jours_retard,
+            "date_recu": date_recu,
+            "relance": relance,
+        })
 
-    for key, group in df.groupby("key"):
-        group = group.sort_values("date")
-        if len(group) < min_occurrences:
-            continue
-
-        intervals = group["date"].diff().dt.days.dropna()
-        if intervals.empty:
-            continue
-
-        median = float(intervals.median())
-        freq = _frequency(median)
-        if freq is None:
-            continue
-
-        # Régularité : on rejette les flux trop irréguliers (faux positifs).
-        spread = intervals.std()
-        if pd.notna(spread) and median > 0 and spread > median * 0.6:
-            continue
-
-        amounts = group["amount"]
-        montant_attendu = float(amounts.median())
-        last_date = group["date"].iloc[-1]
-        prochaine_attendue = last_date + pd.Timedelta(days=round(median))
-        grace = _grace_days(median)
-
-        # Client devenu inactif : on ne le considère plus comme « en retard ».
-        inactif = (now - last_date).days > median * _INACTIF_FACTEUR
-        jours_retard = int((now - prochaine_attendue).days)
-        en_retard = (not inactif) and jours_retard > grace
-
-        recette = {
-            "client": str(key).title(),
-            "key": str(key),
-            "frequence": freq,
-            "montant_attendu": round(montant_attendu, 2),
-            "dernier_encaissement": last_date.strftime("%Y-%m-%d"),
-            "prochaine_attendue": prochaine_attendue.strftime("%Y-%m-%d"),
-            "occurrences": int(len(group)),
-            "statut": "en_retard" if en_retard else ("inactif" if inactif else "a_jour"),
-            "jours_retard": max(0, jours_retard) if en_retard else 0,
-            "relance": (
-                _relance_text(str(key).title(), montant_attendu, max(0, jours_retard))
-                if en_retard
-                else None
-            ),
-        }
-        recettes.append(recette)
-
-    recettes.sort(key=lambda r: (r["statut"] != "en_retard", -r["montant_attendu"]))
-    en_retard = [r for r in recettes if r["statut"] == "en_retard"]
-    # Total mensuel attendu (recettes actives, hors clients inactifs).
-    total = round(
-        sum(
-            _to_monthly(r["montant_attendu"], r["frequence"])
-            for r in recettes
-            if r["statut"] != "inactif"
-        ),
-        2,
+    order = {"late": 0, "upcoming": 1, "received": 2}
+    rows.sort(key=lambda r: (order.get(r["statut"], 3), r["date_prevue"] or ""))
+    en_retard = [r for r in rows if r["statut"] == "late"]
+    total_attendu = round(
+        sum(r["montant_attendu"] for r in rows if r["statut"] in ("late", "upcoming")), 2
     )
+    total_en_retard = round(sum(r["montant_attendu"] for r in en_retard), 2)
     return {
-        "recettes": recettes,
+        "receivables": rows,
         "en_retard": en_retard,
-        "total_attendu_mensuel": total,
+        "total_attendu": total_attendu,
+        "total_en_retard": total_en_retard,
     }
 
 
-def _to_monthly(amount: float, freq: str) -> float:
-    if freq == "hebdomadaire":
-        return amount * 4.345
-    if freq == "bimensuel":
-        return amount * 2
-    if freq == "annuel":
-        return amount / 12
-    return amount  # mensuel
+def inflows_for_forecast(
+    expected: list[dict], transactions: list[dict], start: date, end: date, today: date | None = None
+) -> list[dict]:
+    """Encaissements attendus (non encore reçus) dans [start, end], à injecter comme
+    entrées positives dans la prévision de trésorerie."""
+    data = reconcile_receivables(expected, transactions, today)
+    out: list[dict] = []
+    for r in data["receivables"]:
+        if r["statut"] != "upcoming" or not r["date_prevue"]:
+            continue
+        d = _to_date(r["date_prevue"])
+        if d and start <= d <= end:
+            out.append({"date": r["date_prevue"], "amount": r["montant_attendu"]})
+    return out
