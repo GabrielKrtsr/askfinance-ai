@@ -18,4 +18,4 @@ alter table public.workspaces
 alter table public.workspaces
   add constraint workspaces_onboarding_status_check
   check (onboarding_status in ('pending', 'completed', 'skipped'));
-o
+ola gestion de la connexion mode mobile e

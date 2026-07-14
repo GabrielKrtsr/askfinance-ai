@@ -127,7 +127,13 @@ export function TurnstileCaptcha({
   }
 
   return (
-    <div className={isInteractionOnly ? "min-h-0" : "rounded-xl border bg-muted/20 p-3"}>
+    <div
+      className={
+        isInteractionOnly
+          ? "min-h-0 min-w-0 overflow-hidden"
+          : "min-w-0 overflow-hidden rounded-xl border bg-muted/20 p-2 sm:p-3"
+      }
+    >
       {!isInteractionOnly && (
         <div className="mb-2 flex items-center gap-2 text-xs font-medium text-muted-foreground">
           <ShieldCheck className="h-4 w-4 text-teal" />
@@ -164,7 +170,13 @@ export function TurnstileCaptcha({
       )}
       <div
         ref={containerRef}
-        className={scriptReady && !isInteractionOnly ? "min-h-16" : scriptReady ? "" : "hidden"}
+        className={
+          scriptReady && !isInteractionOnly
+            ? "min-h-16 w-full min-w-0"
+            : scriptReady
+              ? "w-full min-w-0"
+              : "hidden"
+        }
       />
     </div>
   );

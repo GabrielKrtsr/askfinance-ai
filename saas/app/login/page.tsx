@@ -69,7 +69,7 @@ export default function LoginPage() {
           {copy.loginIntro}
         </p>
 
-        <form className="mt-8 space-y-4" onSubmit={handleSubmit}>
+        <form className="mt-6 space-y-4 sm:mt-8" onSubmit={handleSubmit}>
           <div className="space-y-2">
             <Label htmlFor="email">{copy.email}</Label>
             <Input
@@ -151,7 +151,7 @@ export default function LoginPage() {
           {copy.google}
         </Button>
 
-        <p className="mt-8 text-center text-sm text-muted-foreground">
+        <p className="mt-6 text-center text-sm text-muted-foreground sm:mt-8">
           {copy.noAccount}{" "}
           <Link href="/signup" className="font-medium text-primary hover:underline">
             {copy.createAccount}
