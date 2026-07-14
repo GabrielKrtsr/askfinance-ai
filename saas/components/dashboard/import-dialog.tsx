@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import { Loader2, Plus, Trash2, Upload, X } from "lucide-react";
 import { toast } from "sonner";
 
-import { Button } from "@/components/ui/button";
+import { Button, type ButtonProps } from "@/components/ui/button";
+import { CsvImportGuide } from "@/components/dashboard/csv-import-guide";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -34,7 +35,15 @@ function frDate(iso: string) {
   });
 }
 
-export function ImportDialog() {
+export function ImportDialog({
+  triggerLabel = "Importer un relevé",
+  triggerSize = "sm",
+  triggerClassName,
+}: {
+  triggerLabel?: string;
+  triggerSize?: ButtonProps["size"];
+  triggerClassName?: string;
+} = {}) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -127,9 +136,9 @@ export function ImportDialog() {
 
   return (
     <>
-      <Button size="sm" onClick={openDialog}>
+      <Button size={triggerSize} className={triggerClassName} onClick={openDialog}>
         <Plus className="h-4 w-4" />
-        Importer un relevé
+        {triggerLabel}
       </Button>
 
       {open && (
@@ -138,7 +147,7 @@ export function ImportDialog() {
             className="absolute inset-0 bg-black/50"
             onClick={() => setOpen(false)}
           />
-          <div className="relative z-10 w-full max-w-md rounded-xl border bg-card p-6 shadow-xl">
+          <div className="relative z-10 max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-xl border bg-card p-6 shadow-xl">
             <div className="mb-4 flex items-center justify-between">
               <h2 className="text-lg font-bold">Importer un relevé</h2>
               <button
@@ -219,6 +228,8 @@ export function ImportDialog() {
                 {file ? file.name : "Choisir un fichier…"}
               </Button>
             </div>
+
+            <CsvImportGuide className="mt-4" />
 
             <Button
               className="mt-5 w-full"

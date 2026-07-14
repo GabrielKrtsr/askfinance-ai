@@ -73,6 +73,16 @@ const fr: Messages = {
     copilotTitle: "Copilote IA",
     copilotSubtitle: "Une question sur vos finances ?",
     copilotBody: "Posez vos questions et obtenez des analyses sur mesure.",
+    emptyEyebrow: "Votre espace est prêt",
+    emptyTitle: "Ajoutez vos premiers mouvements",
+    emptyTitlePerso: "Ajoutez vos premières transactions",
+    emptyBody: "Importez un relevé CSV pour transformer cet espace vide en tableau de bord de trésorerie.",
+    emptyBodyPerso: "Importez un relevé CSV pour obtenir une vue claire de votre budget et de votre reste à vivre.",
+    emptyAccount: "Choisissez ou créez le compte concerné",
+    emptyImport: "Importez votre relevé bancaire au format CSV",
+    emptyResult: "AskFinance prépare vos indicateurs automatiquement",
+    emptyAction: "Importer mon premier relevé",
+    emptySteps: "3 étapes, puis vos vrais chiffres",
   },
 };
 

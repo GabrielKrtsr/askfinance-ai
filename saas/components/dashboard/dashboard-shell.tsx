@@ -64,8 +64,8 @@ export function DashboardShell({
   children,
 }: {
   user: DashboardUser;
-  workspace: { id: string; name: string; type: WorkspaceType };
-  workspaces: { id: string; name: string; type: WorkspaceType }[];
+  workspace: { id: string; name: string; type: WorkspaceType; role: string };
+  workspaces: { id: string; name: string; type: WorkspaceType; role: string }[];
   children: React.ReactNode;
 }) {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -167,6 +167,9 @@ export function DashboardShell({
         {/* Menu déroulant, mobile */}
         {mobileOpen && (
           <nav className="space-y-1 border-t bg-background px-4 py-3 md:hidden">
+            <div className="mb-3 sm:hidden">
+              <WorkspaceSwitcher workspaces={workspaces} current={workspace} />
+            </div>
             {navItems.map((item) => {
               const active = isActive(pathname, item.href);
               return (

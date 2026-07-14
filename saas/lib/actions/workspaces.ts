@@ -5,7 +5,12 @@ import { cookies } from "next/headers";
 
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { WORKSPACE_COOKIE, type WorkspaceType } from "@/lib/data/workspace";
+import {
+  WORKSPACE_COOKIE,
+  getCurrentWorkspace,
+  type OnboardingStatus,
+  type WorkspaceType,
+} from "@/lib/data/workspace";
 import { appendAuditEvent } from "@/lib/audit";
 
 const YEAR = 60 * 60 * 24 * 365;
@@ -68,6 +73,7 @@ export async function createWorkspace(input: { type: WorkspaceType; name: string
       name,
       // Espaces partageables (business, group) → code d'emblée ; perso solo = aucun.
       join_code: input.type === "personal" ? null : generateJoinCode(),
+      onboarding_status: "pending",
     })
     .select("id")
     .single();
@@ -87,6 +93,84 @@ export async function createWorkspace(input: { type: WorkspaceType; name: string
   cookies().set(WORKSPACE_COOKIE, ws.id, { path: "/", maxAge: YEAR });
 
   return { id: ws.id };
+}
+
+export interface OnboardingContext {
+  workspace: {
+    id: string;
+    name: string;
+    type: WorkspaceType;
+    onboardingStatus: OnboardingStatus;
+  };
+  firstAccount: { id: string; name: string } | null;
+  hasTransactions: boolean;
+}
+
+// Reprend un onboarding interrompu depuis l'état réel de l'espace.
+export async function getOnboardingContext(): Promise<OnboardingContext | null> {
+  const [user, workspace] = await Promise.all([requireUser(), getCurrentWorkspace()]);
+  if (!workspace) return null;
+
+  const admin = createAdminClient();
+  const { data: membership } = await admin
+    .from("workspace_members")
+    .select("role, status")
+    .eq("workspace_id", workspace.id)
+    .eq("user_id", user.id)
+    .eq("status", "active")
+    .maybeSingle();
+  if (!membership) return null;
+
+  const [{ data: account }, { count: transactionCount }] = await Promise.all([
+    admin
+      .from("accounts")
+      .select("id, name")
+      .eq("workspace_id", workspace.id)
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .maybeSingle(),
+    admin
+      .from("transactions")
+      .select("id", { count: "exact", head: true })
+      .eq("workspace_id", workspace.id),
+  ]);
+
+  return {
+    workspace: {
+      id: workspace.id,
+      name: workspace.name,
+      type: workspace.type,
+      onboardingStatus: workspace.onboardingStatus,
+    },
+    firstAccount: account
+      ? { id: account.id as string, name: account.name as string }
+      : null,
+    hasTransactions: (transactionCount ?? 0) > 0,
+  };
+}
+
+export async function setOnboardingStatus(
+  workspaceId: string,
+  status: Exclude<OnboardingStatus, "pending">
+) {
+  const user = await requireUser();
+  const admin = createAdminClient();
+  const { data: membership } = await admin
+    .from("workspace_members")
+    .select("role, status")
+    .eq("workspace_id", workspaceId)
+    .eq("user_id", user.id)
+    .eq("status", "active")
+    .maybeSingle();
+  if (!membership || !["owner", "admin"].includes(membership.role)) {
+    throw new Error("Action réservée aux responsables de l'espace.");
+  }
+
+  const { error } = await admin
+    .from("workspaces")
+    .update({ onboarding_status: status })
+    .eq("id", workspaceId);
+  if (error) throw new Error(error.message);
 }
 
 // Rejoint un espace via son code → adhésion en attente (AUCUN droit tant que non validée).
@@ -267,7 +351,9 @@ export async function leaveWorkspace(workspaceId: string) {
     .eq("user_id", user.id);
   if (error) throw new Error(error.message);
 
-  cookies().delete(WORKSPACE_COOKIE);
+  if (cookies().get(WORKSPACE_COOKIE)?.value === workspaceId) {
+    cookies().delete(WORKSPACE_COOKIE);
+  }
 }
 
 // Supprime un espace ET toutes ses données (cascade SQL). Propriétaire uniquement.
@@ -288,5 +374,7 @@ export async function deleteWorkspace(workspaceId: string) {
   const { error } = await admin.from("workspaces").delete().eq("id", workspaceId);
   if (error) throw new Error(error.message);
 
-  cookies().delete(WORKSPACE_COOKIE);
+  if (cookies().get(WORKSPACE_COOKIE)?.value === workspaceId) {
+    cookies().delete(WORKSPACE_COOKIE);
+  }
 }

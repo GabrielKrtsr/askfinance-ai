@@ -73,6 +73,16 @@ const en: Messages = {
     copilotTitle: "AI Copilot",
     copilotSubtitle: "A question about your finances?",
     copilotBody: "Ask your questions and get tailored insights.",
+    emptyEyebrow: "Your workspace is ready",
+    emptyTitle: "Add your first movements",
+    emptyTitlePerso: "Add your first transactions",
+    emptyBody: "Import a CSV statement to turn this empty workspace into a cash flow dashboard.",
+    emptyBodyPerso: "Import a CSV statement to get a clear view of your budget and money left to spend.",
+    emptyAccount: "Choose or create the relevant account",
+    emptyImport: "Import your bank statement as a CSV file",
+    emptyResult: "AskFinance prepares your indicators automatically",
+    emptyAction: "Import my first statement",
+    emptySteps: "3 steps, then your real figures",
   },
 };
 

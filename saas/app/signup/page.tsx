@@ -1,16 +1,19 @@
 "use client";
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { AuthShell } from "@/components/auth/auth-shell";
+import { TurnstileCaptcha } from "@/components/auth/turnstile-captcha";
 import { createClient } from "@/lib/supabase/client";
 import { useI18n } from "@/lib/i18n/client";
 import { authCopy } from "@/lib/i18n/auth";
+import { getAuthErrorMessage } from "@/lib/auth-errors";
 
 export default function SignupPage() {
+    const router = useRouter();
     const { locale } = useI18n();
     const copy = authCopy[locale];
     const [firstName, setFirstName] = useState("");
@@ -19,12 +22,19 @@ export default function SignupPage() {
     const [password, setPassword] = useState("");
     const [error, setError] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
-    const [success, setSuccess] = useState(false);
+    const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+    const [captchaResetKey, setCaptchaResetKey] = useState(0);
+    const siteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY ?? "";
 
     async function handleSubmit(e: React.FormEvent) {
       e.preventDefault();
       setLoading(true);
       setError(null);
+      if (!captchaToken) {
+        setError(copy.captchaRequired as string);
+        setLoading(false);
+        return;
+      }
 
       const supabase = createClient();
       const { error } = await supabase.auth.signUp({
@@ -32,40 +42,30 @@ export default function SignupPage() {
         password,
         options: {
           data: { first_name: firstName, last_name: lastName },
+          captchaToken,
         },
       });
+      setCaptchaToken(null);
+      setCaptchaResetKey((value) => value + 1);
 
       if (error) {
-        setError(error.message);
+        setError(getAuthErrorMessage(error, locale, "signup"));
         setLoading(false);
       } else {
-        setSuccess(true);
+        router.replace("/dashboard");
+        router.refresh();
       }
     }
 
     async function handleGoogle() {
+      setError(null);
       const supabase = createClient();
-      await supabase.auth.signInWithOAuth({
+      const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: { redirectTo: `${location.origin}/auth/callback` },
       });
+      if (error) setError(getAuthErrorMessage(error, locale, "signup"));
     }
-  if (success) {
-    return (
-      <AuthShell>
-        <div className="animate-fade-in text-center">
-          <h1 className="text-2xl font-bold tracking-tight">{copy.checkTitle}</h1>
-          <p className="mt-3 text-sm text-muted-foreground">
-            {copy.checkText} <strong>{email}</strong>. {copy.checkAction}
-          </p>
-          <Button asChild variant="outline" className="mt-6">
-            <Link href="/login">{copy.backLogin}</Link>
-          </Button>
-        </div>
-      </AuthShell>
-    );
-  }
-
   return (
     <AuthShell>
       <div className="animate-fade-in">
@@ -73,18 +73,6 @@ export default function SignupPage() {
         <p className="mt-2 text-sm text-muted-foreground">
           {copy.signupIntro}
         </p>
-
-        <ul className="mt-5 space-y-1.5">
-          {copy.perks.map((p) => (
-            <li
-              key={p}
-              className="flex items-center gap-2 text-sm text-muted-foreground"
-            >
-              <Check className="h-4 w-4 text-teal" />
-              {p}
-            </li>
-          ))}
-        </ul>
 
         <form className="mt-8 space-y-4" onSubmit={handleSubmit}>
           <div className="grid grid-cols-2 gap-3">
@@ -126,9 +114,28 @@ export default function SignupPage() {
             />
           </div>
 
+          <TurnstileCaptcha
+            siteKey={siteKey}
+            language={locale}
+            resetKey={captchaResetKey}
+            onToken={(token) => {
+              setCaptchaToken(token);
+              if (token) setError(null);
+            }}
+            onError={() => {
+              setCaptchaToken(null);
+              setError(copy.captchaUnavailable as string);
+            }}
+          />
+
           {error && <p className="text-sm text-red-500">{error}</p>}
 
-          <Button type="submit" className="w-full" size="lg" disabled={loading}>
+          <Button
+            type="submit"
+            className="w-full"
+            size="lg"
+            disabled={loading || !captchaToken || !siteKey}
+          >
             {loading ? copy.creating : copy.createMine}
           </Button>
         </form>

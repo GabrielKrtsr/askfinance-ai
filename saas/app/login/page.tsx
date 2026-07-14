@@ -6,9 +6,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { AuthShell } from "@/components/auth/auth-shell";
+import { TurnstileCaptcha } from "@/components/auth/turnstile-captcha";
 import { createClient } from "@/lib/supabase/client";
 import { useI18n } from "@/lib/i18n/client";
 import { authCopy } from "@/lib/i18n/auth";
+import { getAuthErrorMessage } from "@/lib/auth-errors";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -18,17 +20,31 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  const [captchaResetKey, setCaptchaResetKey] = useState(0);
+  const siteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY ?? "";
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
     setError(null);
+    if (!captchaToken) {
+      setError(copy.captchaRequired as string);
+      setLoading(false);
+      return;
+    }
 
     const supabase = createClient();
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+      options: { captchaToken },
+    });
+    setCaptchaToken(null);
+    setCaptchaResetKey((value) => value + 1);
 
     if (error) {
-      setError(copy.badCredentials as string);
+      setError(getAuthErrorMessage(error, locale, "login"));
       setLoading(false);
     } else {
       router.push("/dashboard");
@@ -36,11 +52,13 @@ export default function LoginPage() {
   }
 
   async function handleGoogle() {
+    setError(null);
     const supabase = createClient();
-    await supabase.auth.signInWithOAuth({
+    const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: { redirectTo: `${location.origin}/auth/callback` },
     });
+    if (error) setError(getAuthErrorMessage(error, locale, "login"));
   }
 
   return (
@@ -72,9 +90,29 @@ export default function LoginPage() {
             />
           </div>
 
+          <TurnstileCaptcha
+            siteKey={siteKey}
+            language={locale}
+            resetKey={captchaResetKey}
+            appearance="interaction-only"
+            onToken={(token) => {
+              setCaptchaToken(token);
+              if (token) setError(null);
+            }}
+            onError={() => {
+              setCaptchaToken(null);
+              setError(copy.captchaUnavailable as string);
+            }}
+          />
+
           {error && <p className="text-sm text-red-500">{error}</p>}
 
-          <Button type="submit" className="w-full" size="lg" disabled={loading}>
+          <Button
+            type="submit"
+            className="w-full"
+            size="lg"
+            disabled={loading || !captchaToken || !siteKey}
+          >
             {loading ? copy.signingIn : copy.signIn}
           </Button>
         </form>

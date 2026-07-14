@@ -5,6 +5,7 @@ import { createClient, getAuthUser } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export type WorkspaceType = "personal" | "business" | "group";
+export type OnboardingStatus = "pending" | "completed" | "skipped";
 
 export interface Workspace {
   id: string;
@@ -12,6 +13,7 @@ export interface Workspace {
   type: WorkspaceType;
   role: string;
   status: string;
+  onboardingStatus: OnboardingStatus;
 }
 
 // Cookie qui mémorise l'espace courant (même logique que `locale`).
@@ -20,7 +22,12 @@ export const WORKSPACE_COOKIE = "af_workspace";
 interface MemberRow {
   role: string;
   status: string;
-  workspaces: { id: string; name: string; type: WorkspaceType };
+  workspaces: {
+    id: string;
+    name: string;
+    type: WorkspaceType;
+    onboarding_status: OnboardingStatus;
+  };
 }
 
 function firstNonEmpty(...vals: (string | null | undefined)[]): string {
@@ -64,7 +71,7 @@ export const getWorkspaces = cache(async (): Promise<Workspace[]> => {
   const supabase = createClient();
   const { data } = await supabase
     .from("workspace_members")
-    .select("role, status, workspaces!inner(id, name, type)")
+    .select("role, status, workspaces!inner(id, name, type, onboarding_status)")
     .eq("user_id", user.id)
     .eq("status", "active");
 
@@ -74,6 +81,7 @@ export const getWorkspaces = cache(async (): Promise<Workspace[]> => {
     type: row.workspaces.type,
     role: row.role,
     status: row.status,
+    onboardingStatus: row.workspaces.onboarding_status,
   }));
 });
 

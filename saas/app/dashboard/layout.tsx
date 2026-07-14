@@ -26,6 +26,9 @@ export default async function DashboardLayout({
   // Aucun espace actif → onboarding (choix perso/pro, créer/rejoindre).
   if (!workspace) redirect("/onboarding");
 
+  // Un nouvel espace reste dans le parcours guidé jusqu'à validation ou report.
+  if (workspace.onboardingStatus === "pending") redirect("/onboarding");
+
   const locale = getLocale();
   const messages = getDictionary(locale);
 
@@ -37,8 +40,18 @@ export default async function DashboardLayout({
           initials: profile.initials,
           email: profile.email,
         }}
-        workspace={{ id: workspace.id, name: workspace.name, type: workspace.type }}
-        workspaces={workspaces.map((w) => ({ id: w.id, name: w.name, type: w.type }))}
+        workspace={{
+          id: workspace.id,
+          name: workspace.name,
+          type: workspace.type,
+          role: workspace.role,
+        }}
+        workspaces={workspaces.map((w) => ({
+          id: w.id,
+          name: w.name,
+          type: w.type,
+          role: w.role,
+        }))}
       >
         {children}
       </DashboardShell>

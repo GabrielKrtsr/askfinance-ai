@@ -70,6 +70,8 @@ create table workspaces (
   type       text not null check (type in ('personal', 'business', 'group')),
   name       text not null,
   join_code  text unique,                       -- code de jonction (rejoindre par code), généré côté serveur
+  onboarding_status text not null default 'pending'
+    check (onboarding_status in ('pending', 'completed', 'skipped')),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );

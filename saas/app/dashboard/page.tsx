@@ -1,6 +1,13 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ArrowDownRight, ArrowUpRight, Sparkles } from "lucide-react";
+import {
+  ArrowDownRight,
+  ArrowUpRight,
+  Check,
+  FileSpreadsheet,
+  Landmark,
+  Sparkles,
+} from "lucide-react";
 
 import { getDashboardData, getProfile } from "@/lib/data/dashboard";
 import { getCurrentWorkspace, getWorkspaces } from "@/lib/data/workspace";
@@ -37,7 +44,8 @@ export default async function DashboardPage({
 }) {
   // Un groupe n'a pas de dashboard bancaire : son accueil = les dépenses partagées.
   const workspace = await getCurrentWorkspace();
-  if (workspace?.type === "group") redirect("/dashboard/shared");
+  if (!workspace) redirect("/onboarding");
+  if (workspace.type === "group") redirect("/dashboard/shared");
 
   const isPerso = workspace?.type === "personal";
   const kind = workspace?.type ?? "business";
@@ -56,6 +64,68 @@ export default async function DashboardPage({
   const monthLabel = data.months.find(
     (m) => m.value === data.selectedMonth
   )?.label;
+
+  if (workspace.onboardingStatus === "pending" && !data.hasData) {
+    redirect("/onboarding");
+  }
+
+  if (!data.hasData) {
+    return (
+      <div className="space-y-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">
+              {firstName
+                ? t("dashboard.greetingName", { name: firstName })
+                : t("dashboard.greeting")}
+            </h1>
+            <p className="text-sm text-muted-foreground">
+              {t("dashboard.subtitleNoMonth")}
+            </p>
+          </div>
+          {data.accounts.length > 0 && (
+            <AccountSwitcher
+              accounts={data.accounts}
+              selected={data.selectedAccount}
+              canEdit={workspace.role !== "viewer"}
+              canDelete={workspace.role === "owner" || workspace.role === "admin"}
+            />
+          )}
+        </div>
+
+        <Card className="overflow-hidden border-primary/15">
+          <div className="grid lg:grid-cols-[1.1fr_0.9fr]">
+            <div className="p-7 sm:p-10 lg:p-12">
+              <span className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
+                <Sparkles className="h-3.5 w-3.5" />
+                {t("dashboard.emptyEyebrow")}
+              </span>
+              <h2 className="mt-5 max-w-xl text-3xl font-bold tracking-tight">
+                {t(isPerso ? "dashboard.emptyTitlePerso" : "dashboard.emptyTitle")}
+              </h2>
+              <p className="mt-3 max-w-xl leading-7 text-muted-foreground">
+                {t(isPerso ? "dashboard.emptyBodyPerso" : "dashboard.emptyBody")}
+              </p>
+              <ImportDialog
+                triggerLabel={t("dashboard.emptyAction")}
+                triggerSize="lg"
+                triggerClassName="mt-7"
+              />
+            </div>
+
+            <div className="border-t bg-muted/35 p-7 sm:p-10 lg:border-l lg:border-t-0 lg:p-12">
+              <p className="text-sm font-semibold">{t("dashboard.emptySteps")}</p>
+              <div className="mt-6 space-y-5">
+                <SetupLine icon={<Landmark />} number="1" text={t("dashboard.emptyAccount")} />
+                <SetupLine icon={<FileSpreadsheet />} number="2" text={t("dashboard.emptyImport")} />
+                <SetupLine icon={<Check />} number="3" text={t("dashboard.emptyResult")} />
+              </div>
+            </div>
+          </div>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -77,6 +147,7 @@ export default async function DashboardPage({
           <AccountSwitcher
             accounts={data.accounts}
             selected={data.selectedAccount}
+            canEdit={workspace.role !== "viewer"}
             canDelete={workspace?.role === "owner" || workspace?.role === "admin"}
           />
           {data.months.length > 0 && (
@@ -199,6 +270,28 @@ export default async function DashboardPage({
           </Card>
         </>
       )}
+    </div>
+  );
+}
+
+function SetupLine({
+  icon,
+  number,
+  text,
+}: {
+  icon: React.ReactNode;
+  number: string;
+  text: string;
+}) {
+  return (
+    <div className="flex items-center gap-4">
+      <span className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border bg-background text-primary shadow-sm [&_svg]:h-5 [&_svg]:w-5">
+        {icon}
+        <span className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">
+          {number}
+        </span>
+      </span>
+      <p className="text-sm font-medium leading-5">{text}</p>
     </div>
   );
 }

@@ -63,6 +63,7 @@ askfinance-ai/
 |---|---|---|
 | `auth.users` | (Supabase) | géré par Supabase Auth |
 | `profiles` | id (=auth.users.id), first_name, last_name | rempli par le trigger `handle_new_user` (email → first_name ; Google → given_name/full_name) |
+| `workspaces` | id, type, name, onboarding_status | espace financier ; onboarding `pending/completed/skipped` partagé par l'espace |
 | `accounts` | id, user_id, name, type, opening_balance | comptes bancaires de l'utilisateur (avec solde d'ouverture) |
 | `imports` | id, user_id, account_id, filename, count | un **lot d'import** (annulable) |
 | `transactions` | id, user_id, account_id, import_id, date, merchant, category, account, amount, type, status, is_transfer, fingerprint | voir ci-dessous |
@@ -91,13 +92,18 @@ Le SQL de migration complet est dans l'historique ; refléter tout changement de
 ## 4. Avancement (au 2026-07-14)
 
 ### ✅ Fait
+- **Onboarding par espace** : choix Solo/Groupe/Entreprise, création du premier compte,
+  solde initial, premier import CSV facultatif et reprise après interruption. Un espace
+  vide dont la configuration est reportée affiche un état vide compact et actionnable.
 - **Site public multi-segment** : accueil premium et pages Fonctionnalités,
   Solutions Solo/Groupe/Entreprise, Yassia IA et Sécurité ; navigation responsive
   et animations accessibles avec Motion. Les allégations non démontrées et faux
   témoignages ont été retirés.
-- **Pages légales publiques** : mentions légales, confidentialité et CGU reliées
-  à l'inscription. Les identités juridiques, coordonnées et hébergeurs manquants
-  restent explicitement marqués à compléter avant publication commerciale.
+- **Pages légales publiques** : mentions légales, politique de confidentialité et
+  CGU reliées à l'inscription, adaptées à l'éditeur personne physique Gabriel
+  Kreutser et à la bêta gratuite. Les rôles de Vercel, Render, Supabase, Google
+  Gemini et Cloudflare Turnstile, les traitements, durées, droits et transferts
+  éventuels y sont documentés sans statut de société ou offre payante inventés.
 - **Permissions par rôle** : `viewer` en lecture seule ; `member` contribue ;
   `admin`/`owner` valident les workflows et administrent les rôles. Les écritures
   sensibles workflow/audit passent uniquement par les actions serveur.
@@ -114,11 +120,14 @@ Le SQL de migration complet est dans l'historique ; refléter tout changement de
 - **Cohérence multi-produit** : Yassia B2B dans `business`, coach financier sans
   outils fiscaux dans `personal`, masquée/refusée dans `group` tant qu'aucun outil
   dédié au registre partagé n'existe.
-- **Auth** : email/mot de passe + Google (OAuth), profils (nom/prénom auto).
+- **Auth** : email/mot de passe sans confirmation par e-mail + Google (OAuth), profils
+  (nom/prénom auto) et protection des inscriptions par Cloudflare Turnstile, validée
+  par Supabase Auth via `captchaToken`.
 - **Import CSV direct, sans Redis/Celery** (Python/pandas, limite 10 Mo) : transit
   par le bucket Storage privé, auto-détection séparateur, formats FR (Débit/Crédit,
   virgule décimale, dates JJ/MM/AAAA), dédoublonnage (fingerprint + index d'occurrence),
-  **popup d'import** (choix/création de compte), **lots annulables**.
+  **popup d'import** (choix/création de compte), guide de format intégré avec modèle
+  CSV téléchargeable, **lots annulables**.
 - **Dashboard** : KPIs (solde de trésorerie, dépenses, revenus, **marge nette**),
   graphe flux de trésorerie, camembert par catégorie, suivi budgétaire (CRUD),
   transactions récentes, **sélecteur de mois**, **sélecteur de compte**.
@@ -126,7 +135,8 @@ Le SQL de migration complet est dans l'historique ; refléter tout changement de
 - **Charges récurrentes** (Python) : clustering marchand + intervalles + alertes (hausse/doublon).
 - **Prévision 30/60/90 j** (Python/scikit-learn) : régression + récurrents planifiés,
   bande de confiance, **alerte découvert**.
-- **Multi-compte** : comptes avec solde d'ouverture, vue par compte / consolidée.
+- **Multi-compte** : comptes avec solde d'ouverture, vue par compte / consolidée et
+  ajustement audité du solde courant sans altérer les transactions importées.
 - **Virements internes** : exclus des KPIs/récurrents/prévision ; détectés via tag banque
   + appariement des 2 jambes (bouton « Détecter virements »).
 - **Radar des encaissements** (déclaratif) : l'utilisateur **déclare** les virements
@@ -178,6 +188,8 @@ Le SQL de migration complet est dans l'historique ; refléter tout changement de
    - `SUPABASE_SERVICE_ROLE_KEY` (clé **secrète** `sb_secret_…`) → **uniquement** dans
      `api-AskFinance/.env`. Jamais côté front.
    - Clé **publishable** (`sb_publishable_…`) → `saas/.env.local` (`NEXT_PUBLIC_SUPABASE_ANON_KEY`).
+   - Site key Turnstile → `NEXT_PUBLIC_TURNSTILE_SITE_KEY` côté front ; la Secret key
+     Turnstile reste exclusivement dans la configuration CAPTCHA de Supabase Auth.
 7. **RLS = barrière de sécurité** pour les lectures front. L'API Python utilise service_role
    et pose toujours `user_id` depuis le token validé (et vérifie que `account_id` appartient à l'utilisateur).
 8. **Virements internes** : exclus des KPIs / récurrents / prévision ; inclus dans les soldes.
