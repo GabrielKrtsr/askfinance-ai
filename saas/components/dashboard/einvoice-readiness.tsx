@@ -33,7 +33,7 @@ const NOUVELLES_MENTIONS = [
 // Étapes de préparation (clé persistée + libellé).
 const CHECKLIST: { key: string; label: string }[] = [
   { key: "reception", label: "Pouvoir recevoir des factures électroniques (dès le 1er sept. 2026)" },
-  { key: "pdp", label: "Choisir une plateforme de dématérialisation partenaire (PDP)" },
+  { key: "pdp", label: "Choisir une plateforme agréée par l’administration" },
   { key: "annuaire", label: "Vérifier vos coordonnées légales (SIREN) pour l'annuaire" },
   { key: "format", label: "S'assurer que votre outil gère le format Factur-X / UBL / CII" },
   { key: "mentions", label: "Ajouter les 4 nouvelles mentions obligatoires sur vos factures" },
@@ -97,7 +97,7 @@ export function EInvoiceReadiness({ workspaceId }: { workspaceId: string }) {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <FileText className="h-5 w-5 text-primary" />
-          Facture électronique 2026 — êtes-vous prêt ?
+          Facture électronique 2026 : êtes-vous prêt ?
         </CardTitle>
         <CardDescription>
           La réforme devient obligatoire. Préparez votre entreprise étape par

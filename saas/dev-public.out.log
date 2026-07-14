@@ -1,0 +1,60 @@
+
+> askfinance-ai@0.1.0 dev
+> next dev
+
+  ▲ Next.js 14.2.35
+  - Local:        http://localhost:3000
+  - Environments: .env.local
+
+ ✓ Starting...
+ ✓ Ready in 3.4s
+ ✓ Compiled /middleware in 517ms
+ ✓ Compiled (128 modules)
+ ○ Compiling / ...
+ ✓ Compiled / in 12.4s (1503 modules)
+ GET / 200 in 1564ms
+ ✓ Compiled in 1518ms (702 modules)
+ GET / 200 in 111ms
+ GET / 200 in 223ms
+ GET / 200 in 152ms
+ ○ Compiling /features ...
+ ✓ Compiled /features in 1153ms (1481 modules)
+ GET /features 200 in 1813ms
+ ○ Compiling /solutions ...
+ ✓ Compiled /solutions in 681ms (1484 modules)
+ GET /solutions 200 in 858ms
+ ○ Compiling /solutions/solo ...
+ ✓ Compiled /solutions/solo in 827ms (1489 modules)
+ GET /solutions/solo 200 in 1164ms
+ ○ Compiling /solutions/group ...
+ ✓ Compiled /solutions/group in 706ms (1494 modules)
+ GET /solutions/group 200 in 864ms
+ ✓ Compiled /solutions/business in 406ms (1500 modules)
+ GET /solutions/business 200 in 530ms
+ ○ Compiling /ai ...
+ ✓ Compiled /ai in 1317ms (1508 modules)
+ GET /ai 200 in 1604ms
+ ○ Compiling /security ...
+ ✓ Compiled /security in 1245ms (1517 modules)
+ GET /security 200 in 1403ms
+ ○ Compiling /legal/mentions-legales ...
+ ✓ Compiled /legal/mentions-legales in 1924ms (1523 modules)
+ GET /legal/mentions-legales 200 in 2110ms
+ ○ Compiling /legal/privacy ...
+ ✓ Compiled /legal/privacy in 953ms (1525 modules)
+ GET /legal/privacy 200 in 1300ms
+ ○ Compiling /legal/terms ...
+ ✓ Compiled /legal/terms in 1060ms (1527 modules)
+ GET /legal/terms 200 in 1286ms
+ ○ Compiling /login ...
+ ✓ Compiled /login in 3.2s (1682 modules)
+ GET /login 200 in 3756ms
+ ○ Compiling /signup ...
+ ✓ Compiled /signup in 2.2s (1692 modules)
+ GET /signup 200 in 2554ms
+ GET /signup 200 in 102ms
+ GET /login 200 in 65ms
+ GET /legal/privacy 200 in 93ms
+ GET /security 200 in 155ms
+ GET / 200 in 257ms
+[?25h

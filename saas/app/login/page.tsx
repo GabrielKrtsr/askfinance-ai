@@ -7,9 +7,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { AuthShell } from "@/components/auth/auth-shell";
 import { createClient } from "@/lib/supabase/client";
+import { useI18n } from "@/lib/i18n/client";
+import { authCopy } from "@/lib/i18n/auth";
 
 export default function LoginPage() {
   const router = useRouter();
+  const { locale } = useI18n();
+  const copy = authCopy[locale];
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -24,7 +28,7 @@ export default function LoginPage() {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
 
     if (error) {
-      setError("E-mail ou mot de passe incorrect.");
+      setError(copy.badCredentials as string);
       setLoading(false);
     } else {
       router.push("/dashboard");
@@ -42,14 +46,14 @@ export default function LoginPage() {
   return (
     <AuthShell>
       <div className="animate-fade-in">
-        <h1 className="text-2xl font-bold tracking-tight">Content de vous revoir</h1>
+        <h1 className="text-2xl font-bold tracking-tight">{copy.loginTitle}</h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          Connectez-vous pour accéder à votre tableau de bord.
+          {copy.loginIntro}
         </p>
 
         <form className="mt-8 space-y-4" onSubmit={handleSubmit}>
           <div className="space-y-2">
-            <Label htmlFor="email">Adresse e-mail</Label>
+            <Label htmlFor="email">{copy.email}</Label>
             <Input
               id="email"
               type="email"
@@ -59,7 +63,7 @@ export default function LoginPage() {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="password">Mot de passe</Label>
+            <Label htmlFor="password">{copy.password}</Label>
             <Input
               id="password"
               type="password"
@@ -71,13 +75,13 @@ export default function LoginPage() {
           {error && <p className="text-sm text-red-500">{error}</p>}
 
           <Button type="submit" className="w-full" size="lg" disabled={loading}>
-            {loading ? "Connexion…" : "Se connecter"}
+            {loading ? copy.signingIn : copy.signIn}
           </Button>
         </form>
 
         <div className="my-6 flex items-center gap-4">
           <div className="h-px flex-1 bg-border" />
-          <span className="text-xs text-muted-foreground">ou</span>
+          <span className="text-xs text-muted-foreground">{copy.or}</span>
           <div className="h-px flex-1 bg-border" />
         </div>
 
@@ -106,13 +110,13 @@ export default function LoginPage() {
               d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1A11 11 0 0 0 2.18 7.06l3.66 2.84C6.71 7.3 9.14 5.38 12 5.38Z"
             />
           </svg>
-          Continuer avec Google
+          {copy.google}
         </Button>
 
         <p className="mt-8 text-center text-sm text-muted-foreground">
-          Pas encore de compte ?{" "}
+          {copy.noAccount}{" "}
           <Link href="/signup" className="font-medium text-primary hover:underline">
-            Créer un compte
+            {copy.createAccount}
           </Link>
         </p>
       </div>

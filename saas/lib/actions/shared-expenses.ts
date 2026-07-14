@@ -17,12 +17,15 @@ async function requireActiveMember(workspaceId: string) {
   const admin = createAdminClient();
   const { data } = await admin
     .from("workspace_members")
-    .select("status")
+    .select("status, role")
     .eq("workspace_id", workspaceId)
     .eq("user_id", user.id)
     .eq("status", "active")
     .maybeSingle();
   if (!data) throw new Error("Accès refusé à cet espace.");
+  if (data.role === "viewer") {
+    throw new Error("Cet espace est en lecture seule pour vous.");
+  }
 
   return { user, admin };
 }

@@ -175,6 +175,8 @@ def parse_transactions(
             "date": row.date,
             "label": row.merchant,
             "category": row.category,
+            "category_source": "import",
+            "category_confidence": None,
             "amount": float(row.amount),
             "direction": row.type,
             "status": "cleared",

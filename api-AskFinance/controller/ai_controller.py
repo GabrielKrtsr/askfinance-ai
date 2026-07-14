@@ -19,6 +19,7 @@ from services.supabase_service import (
     create_conversation,
     fetch_recent_messages,
     insert_message,
+    get_workspace_type,
 )
 
 router = APIRouter()
@@ -99,8 +100,11 @@ def chat(
     authorization: str = Header(default=""),
     x_workspace_id: str = Header(default=""),
 ):
-    """Réponse complète (non-streaming) — repli si le front ne gère pas le SSE."""
+    """Réponse complète (non-streaming), utilisée si le front ne gère pas le SSE."""
     user_id, workspace_id = require_member(authorization, x_workspace_id)
+    workspace_type = get_workspace_type(workspace_id)
+    if workspace_type == "group":
+        raise HTTPException(status_code=400, detail="Yassia n'est pas encore disponible dans les espaces de groupe.")
     _check_rate_limit(user_id)
     message = payload.message.strip()
 
@@ -111,7 +115,7 @@ def chat(
     insert_message(conversation_id, user_id, "user", message)
 
     try:
-        result = answer_financial_question(workspace_id, message, payload.advisor, history)
+        result = answer_financial_question(workspace_id, message, payload.advisor, history, workspace_type)
     except GeminiConfigurationError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except GeminiCallError as exc:
@@ -133,6 +137,9 @@ def chat_stream(
 ):
     """Réponse en streaming (SSE) : étapes en cours + texte token-par-token."""
     user_id, workspace_id = require_member(authorization, x_workspace_id)
+    workspace_type = get_workspace_type(workspace_id)
+    if workspace_type == "group":
+        raise HTTPException(status_code=400, detail="Yassia n'est pas encore disponible dans les espaces de groupe.")
     _check_rate_limit(user_id)
     message = payload.message.strip()
 
@@ -146,7 +153,7 @@ def chat_stream(
         yield _sse("meta", {"conversation_id": conversation_id})
         parts: list[str] = []
         try:
-            for event in stream_financial_answer(workspace_id, message, payload.advisor, history):
+            for event in stream_financial_answer(workspace_id, message, payload.advisor, history, workspace_type):
                 kind = event["kind"]
                 if kind == "step":
                     yield _sse("step", {"label": event["label"]})
@@ -155,7 +162,7 @@ def chat_stream(
                     yield _sse("token", {"text": event["text"]})
                 elif kind == "error":
                     yield _sse("error", {"message": event["message"]})
-        except Exception as exc:  # noqa: BLE001 — on protège le flux quoi qu'il arrive
+        except Exception as exc:  # noqa: BLE001, on protège le flux quoi qu'il arrive
             print(f"[ai] stream echec: {exc}", flush=True)
             yield _sse("error", {"message": "Erreur interne du copilote."})
 

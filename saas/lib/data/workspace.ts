@@ -1,7 +1,7 @@
 import { cache } from "react";
 import { cookies } from "next/headers";
 
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getAuthUser } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export type WorkspaceType = "personal" | "business" | "group";
@@ -58,12 +58,10 @@ function currentUserDisplayName(user: {
 
 // Espaces dont l'utilisateur est membre ACTIF (RLS : ses propres adhésions).
 export const getWorkspaces = cache(async (): Promise<Workspace[]> => {
-  const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getAuthUser();
   if (!user) return [];
 
+  const supabase = createClient();
   const { data } = await supabase
     .from("workspace_members")
     .select("role, status, workspaces!inner(id, name, type)")
@@ -89,11 +87,9 @@ export const getCurrentWorkspace = cache(async (): Promise<Workspace | null> => 
   if (fromCookie) return fromCookie;
 
   // Repli : default_workspace_id du profil.
-  const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getAuthUser();
   if (user) {
+    const supabase = createClient();
     const { data: profile } = await supabase
       .from("profiles")
       .select("default_workspace_id")
@@ -130,10 +126,7 @@ export interface MembersView {
 export async function getWorkspaceMembers(
   workspaceId: string
 ): Promise<MembersView | null> {
-  const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getAuthUser();
   if (!user) return null;
 
   const admin = createAdminClient();

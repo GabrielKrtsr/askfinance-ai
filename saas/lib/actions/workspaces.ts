@@ -6,6 +6,7 @@ import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { WORKSPACE_COOKIE, type WorkspaceType } from "@/lib/data/workspace";
+import { appendAuditEvent } from "@/lib/audit";
 
 const YEAR = 60 * 60 * 24 * 365;
 
@@ -118,7 +119,6 @@ export async function joinByCode(code: string) {
     status: "pending",
   });
   if (error) throw new Error(error.message);
-
   return { workspaceName: ws.name as string, status: "pending" };
 }
 
@@ -179,6 +179,7 @@ export async function approveMember(input: {
     .eq("user_id", input.userId)
     .eq("status", "pending");
   if (error) throw new Error(error.message);
+  await appendAuditEvent(admin, { workspaceId: input.workspaceId, actorId: caller.id, action: "member.approved", entityType: "member", entityId: input.userId, metadata: { role: grantedRole } });
 }
 
 // Retire un membre (ou refuse une demande). Réservé aux owner/admin actifs,
@@ -221,6 +222,20 @@ export async function removeMember(input: { workspaceId: string; userId: string 
     .eq("workspace_id", input.workspaceId)
     .eq("user_id", input.userId);
   if (error) throw new Error(error.message);
+  await appendAuditEvent(admin, { workspaceId: input.workspaceId, actorId: caller.id, action: "member.removed", entityType: "member", entityId: input.userId });
+}
+
+export async function changeMemberRole(input: { workspaceId: string; userId: string; role: "admin" | "member" | "viewer" }) {
+  const caller = await requireUser();
+  const admin = createAdminClient();
+  const { data: callerMembership } = await admin.from("workspace_members").select("role, status").eq("workspace_id", input.workspaceId).eq("user_id", caller.id).maybeSingle();
+  if (!callerMembership || callerMembership.status !== "active" || !["owner", "admin"].includes(callerMembership.role)) throw new Error("Action réservée aux responsables.");
+  const { data: target } = await admin.from("workspace_members").select("role, status").eq("workspace_id", input.workspaceId).eq("user_id", input.userId).maybeSingle();
+  if (!target || target.status !== "active") throw new Error("Membre introuvable.");
+  if (rank(target.role) >= rank(callerMembership.role) || rank(input.role) >= rank(callerMembership.role)) throw new Error("Rôle non autorisé.");
+  const { error } = await admin.from("workspace_members").update({ role: input.role }).eq("workspace_id", input.workspaceId).eq("user_id", input.userId);
+  if (error) throw new Error(error.message);
+  await appendAuditEvent(admin, { workspaceId: input.workspaceId, actorId: caller.id, action: "member.role_changed", entityType: "member", entityId: input.userId, metadata: { from: target.role, to: input.role } });
 }
 
 // Quitte un espace (retire sa propre adhésion). Interdit au dernier propriétaire :

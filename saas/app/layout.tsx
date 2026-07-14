@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
 import { Toaster } from "sonner";
+import { I18nProvider } from "@/lib/i18n/client";
+import { getDictionary } from "@/lib/i18n/dictionaries";
+import { getLocale } from "@/lib/i18n/server";
 import "./globals.css";
 
 const geistSans = localFont({
@@ -15,9 +18,9 @@ const geistMono = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "AskFinance AI — Votre copilote de trésorerie pour TPE et PME",
+  title: "AskFinance AI | Comprendre aujourd’hui, décider demain",
   description:
-    "Importez vos relevés, suivez vos dépenses et pilotez votre trésorerie avec votre copilote IA. Conçu pour les TPE et PME.",
+    "Budgets, dépenses partagées et pilotage de trésorerie avec des espaces Solo, Groupe et Entreprise.",
 };
 
 export default function RootLayout({
@@ -25,8 +28,11 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const locale = getLocale();
+  const messages = getDictionary(locale);
+
   return (
-    <html lang="fr">
+    <html lang={locale} suppressHydrationWarning>
       <body
         className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased`}
       >
@@ -34,10 +40,10 @@ export default function RootLayout({
         <script
           dangerouslySetInnerHTML={{
             __html:
-              "try{var t=localStorage.getItem('theme')||'system';var d=t==='dark'||(t==='system'&&window.matchMedia('(prefers-color-scheme: dark)').matches);document.documentElement.classList.toggle('dark',d);}catch(e){}",
+              "try{var t=localStorage.getItem('theme')||'light';document.documentElement.classList.toggle('dark',t==='dark');}catch(e){}",
           }}
         />
-        {children}
+        <I18nProvider locale={locale} messages={messages}>{children}</I18nProvider>
         <Toaster richColors position="top-right" />
       </body>
     </html>

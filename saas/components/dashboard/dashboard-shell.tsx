@@ -93,7 +93,7 @@ export function DashboardShell({
             <WorkspaceSwitcher workspaces={workspaces} current={workspace} />
           </div>
 
-          {/* Menu principal — desktop */}
+          {/* Menu principal, desktop */}
           <nav className="ml-2 hidden items-center gap-1 md:flex lg:ml-4">
             {navItems.map((item) => {
               const active = isActive(pathname, item.href);
@@ -129,13 +129,14 @@ export function DashboardShell({
               <Settings className="h-5 w-5" />
             </Link>
 
-            <button
+            <Link
+              href={workspace.type === "group" ? "/dashboard/shared" : "/dashboard/pilotage#inbox"}
               className="relative flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
               aria-label={t("nav.notifications")}
             >
               <Bell className="h-5 w-5" />
               <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-teal ring-2 ring-background" />
-            </button>
+            </Link>
 
             <div
               className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-primary to-teal text-sm font-semibold text-white"
@@ -152,7 +153,7 @@ export function DashboardShell({
               <LogOut className="h-4 w-4" />
             </button>
 
-            {/* Menu burger — mobile */}
+            {/* Menu burger, mobile */}
             <button
               onClick={() => setMobileOpen((v) => !v)}
               className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground md:hidden"
@@ -163,7 +164,7 @@ export function DashboardShell({
           </div>
         </div>
 
-        {/* Menu déroulant — mobile */}
+        {/* Menu déroulant, mobile */}
         {mobileOpen && (
           <nav className="space-y-1 border-t bg-background px-4 py-3 md:hidden">
             {navItems.map((item) => {
@@ -200,7 +201,9 @@ export function DashboardShell({
         {children}
       </main>
 
-      <FloatingAiChat userInitials={user.initials} workspaceId={workspace.id} />
+      {workspace.type !== "group" ? (
+        <FloatingAiChat userInitials={user.initials} workspaceId={workspace.id} workspaceType={workspace.type} />
+      ) : null}
     </div>
   );
 }

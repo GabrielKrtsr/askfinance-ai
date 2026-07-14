@@ -7,15 +7,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { AuthShell } from "@/components/auth/auth-shell";
 import { createClient } from "@/lib/supabase/client";
-
-
-const perks = [
-  "14 jours d'essai, sans carte bancaire",
-  "Import CSV illimité",
-  "Copilote IA inclus",
-];
+import { useI18n } from "@/lib/i18n/client";
+import { authCopy } from "@/lib/i18n/auth";
 
 export default function SignupPage() {
+    const { locale } = useI18n();
+    const copy = authCopy[locale];
     const [firstName, setFirstName] = useState("");
     const [lastName, setLastName] = useState("");
     const [email, setEmail] = useState("");
@@ -57,13 +54,12 @@ export default function SignupPage() {
     return (
       <AuthShell>
         <div className="animate-fade-in text-center">
-          <h1 className="text-2xl font-bold tracking-tight">Vérifiez vos e-mails 📬</h1>
+          <h1 className="text-2xl font-bold tracking-tight">{copy.checkTitle}</h1>
           <p className="mt-3 text-sm text-muted-foreground">
-            Nous avons envoyé un lien de confirmation à <strong>{email}</strong>.
-            Cliquez dessus pour activer votre compte.
+            {copy.checkText} <strong>{email}</strong>. {copy.checkAction}
           </p>
           <Button asChild variant="outline" className="mt-6">
-            <Link href="/login">Retour à la connexion</Link>
+            <Link href="/login">{copy.backLogin}</Link>
           </Button>
         </div>
       </AuthShell>
@@ -73,13 +69,13 @@ export default function SignupPage() {
   return (
     <AuthShell>
       <div className="animate-fade-in">
-        <h1 className="text-2xl font-bold tracking-tight">Créer votre compte</h1>
+        <h1 className="text-2xl font-bold tracking-tight">{copy.signupTitle}</h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          Démarrez votre essai gratuit en moins de 2 minutes.
+          {copy.signupIntro}
         </p>
 
         <ul className="mt-5 space-y-1.5">
-          {perks.map((p) => (
+          {copy.perks.map((p) => (
             <li
               key={p}
               className="flex items-center gap-2 text-sm text-muted-foreground"
@@ -93,7 +89,7 @@ export default function SignupPage() {
         <form className="mt-8 space-y-4" onSubmit={handleSubmit}>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
-              <Label htmlFor="firstname">Prénom</Label>
+              <Label htmlFor="firstname">{copy.firstName}</Label>
               <Input
                 id="firstname"
                 value={firstName}
@@ -101,7 +97,7 @@ export default function SignupPage() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="lastname">Nom</Label>
+              <Label htmlFor="lastname">{copy.lastName}</Label>
               <Input
                 id="lastname"
                 value={lastName}
@@ -111,7 +107,7 @@ export default function SignupPage() {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="email">Adresse e-mail</Label>
+            <Label htmlFor="email">{copy.email}</Label>
             <Input
               id="email"
               type="email"
@@ -121,7 +117,7 @@ export default function SignupPage() {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="password">Mot de passe</Label>
+            <Label htmlFor="password">{copy.password}</Label>
             <Input
               id="password"
               type="password"
@@ -133,13 +129,13 @@ export default function SignupPage() {
           {error && <p className="text-sm text-red-500">{error}</p>}
 
           <Button type="submit" className="w-full" size="lg" disabled={loading}>
-            {loading ? "Création…" : "Créer mon compte"}
+            {loading ? copy.creating : copy.createMine}
           </Button>
         </form>
 
         <div className="my-6 flex items-center gap-4">
           <div className="h-px flex-1 bg-border" />
-          <span className="text-xs text-muted-foreground">ou</span>
+          <span className="text-xs text-muted-foreground">{copy.or}</span>
           <div className="h-px flex-1 bg-border" />
         </div>
 
@@ -168,25 +164,25 @@ export default function SignupPage() {
               d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1A11 11 0 0 0 2.18 7.06l3.66 2.84C6.71 7.3 9.14 5.38 12 5.38Z"
             />
           </svg>
-          Continuer avec Google
+          {copy.google}
         </Button>
 
         <p className="mt-4 text-center text-xs text-muted-foreground">
-          En créant un compte, vous acceptez nos{" "}
-          <Link href="#" className="underline">
-            CGU
+          {copy.consentStart}{" "}
+          <Link href="/legal/terms" className="underline">
+            {copy.terms}
           </Link>{" "}
-          et notre{" "}
-          <Link href="#" className="underline">
-            politique de confidentialité
+          {copy.consentAnd}{" "}
+          <Link href="/legal/privacy" className="underline">
+            {copy.privacy}
           </Link>
           .
         </p>
 
         <p className="mt-6 text-center text-sm text-muted-foreground">
-          Déjà un compte ?{" "}
+          {copy.already}{" "}
           <Link href="/login" className="font-medium text-primary hover:underline">
-            Se connecter
+            {copy.signIn}
           </Link>
         </p>
       </div>

@@ -1,414 +1,211 @@
+"use client";
+
 import Link from "next/link";
 import {
   ArrowRight,
-  BarChart3,
+  BellRing,
   Bot,
-  Check,
+  BriefcaseBusiness,
+  CheckCircle2,
   FileSpreadsheet,
+  LineChart,
+  PiggyBank,
   ShieldCheck,
-  Sparkles,
-  Wallet,
+  Users,
+  WalletCards,
 } from "lucide-react";
 
-import { Logo } from "@/components/logo";
-import { SiteHeader } from "@/components/landing/site-header";
+import { ProductPreview } from "@/components/landing/product-preview";
+import { PublicShell } from "@/components/landing/public-shell";
+import { Reveal } from "@/components/landing/reveal";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Card } from "@/components/ui/card";
+import { useI18n } from "@/lib/i18n/client";
 
-const features = [
-  {
-    icon: FileSpreadsheet,
-    title: "Import CSV en un clic",
-    desc: "Glissez vos relevés bancaires, nous catégorisons automatiquement chaque transaction.",
-  },
-  {
-    icon: BarChart3,
-    title: "Tableaux de bord clairs",
-    desc: "Trésorerie, dépenses par catégorie, marges — tout est visualisé en temps réel.",
-  },
-  {
-    icon: Bot,
-    title: "Copilote IA",
-    desc: "Posez vos questions en langage naturel et obtenez des analyses instantanées.",
-  },
-  {
-    icon: Wallet,
-    title: "Suivi budgétaire",
-    desc: "Fixez des budgets par poste et recevez une alerte avant le dépassement.",
-  },
-  {
-    icon: ShieldCheck,
-    title: "Sécurité bancaire",
-    desc: "Chiffrement de bout en bout et hébergement des données en France.",
-  },
-  {
-    icon: Sparkles,
-    title: "Prévisions",
-    desc: "Anticipez votre trésorerie à 3 mois grâce aux modèles prédictifs.",
-  },
-];
+const perspectiveMeta = [
+  [PiggyBank, "/solutions/solo", "from-violet-500/20 to-violet-500/5 text-violet-700 dark:text-violet-200"],
+  [Users, "/solutions/group", "from-cyan-500/20 to-cyan-500/5 text-cyan-700 dark:text-cyan-200"],
+  [BriefcaseBusiness, "/solutions/business", "from-teal/20 to-teal/5 text-teal-700 dark:text-teal"],
+] as const;
+const capabilityIcons = [FileSpreadsheet, WalletCards, LineChart, BellRing, ShieldCheck, Bot] as const;
 
-const plans = [
-  {
-    name: "Essentiel",
-    price: "49",
-    desc: "Pour les indépendants et les TPE.",
-    cta: "Démarrer l'essai",
-    highlighted: false,
-    features: [
-      "1 société",
-      "Import CSV illimité",
-      "Tableau de bord trésorerie",
-      "Copilote IA — 50 questions/mois",
-      "Historique 12 mois",
-    ],
+const landingCopy = {
+  fr: {
+    heroA: "Comprendre aujourd’hui.", heroB: "Décider demain.", heroText: "AskFinance transforme vos relevés et vos engagements en décisions concrètes. Gérez votre budget, équilibrez un groupe ou pilotez une entreprise.", create: "Créer mon espace", choose: "Choisir mon usage", beta: "Bêta gratuite · Sans carte bancaire · Sans connexion bancaire",
+    strip: ["Import CSV", "Budgets mensuels", "Prévisions", "Encaissements", "Workflows", "IA à outils"], perspectivesEyebrow: "Trois points de vue", perspectivesTitle: "Les mêmes chiffres ne racontent pas la même histoire à tout le monde.", discover: "Découvrir",
+    perspectives: [["B2C · Solo", "Mon argent, enfin lisible", "Budgets mensuels, dépenses, solde prévisionnel et coach personnel à partir de vos propres données."], ["B2C · Groupe", "Les comptes sans les tensions", "Dépenses partagées, parts personnalisées, soldes entre membres et règlements confirmés ou contestés."], ["B2B · Entreprise", "La trésorerie devient pilotable", "Prévisions, encaissements, fiscalité indicative, workflows, audit et copilote IA pour TPE et PME."]],
+    chainEyebrow: "Du fichier à l’action", chainTitle: "Une chaîne financière complète, sans boîte noire.", chainText: "Chaque fonctionnalité répond à une étape observable du pilotage.", allFeatures: "Voir toutes les fonctionnalités",
+    capabilities: [["Importer sans connecter sa banque", "Vos relevés CSV transitent par un espace privé puis sont supprimés après traitement."], ["Catégoriser et apprendre", "Corrigez une catégorie une fois : la règle est proposée aux imports suivants."], ["Voir plus loin que le solde", "Prévisions à 30, 60 ou 90 jours avec charges récurrentes et scénarios."], ["Traiter ce qui compte", "Une boîte de réception réunit anomalies, budgets, impayés et échéances."], ["Collaborer avec des rôles clairs", "Lecture seule, contribution, administration, validations et journal d’audit."], ["Interroger Yassia", "L’IA appelle uniquement les outils nécessaires et répond à partir de votre espace."]],
+    aiEyebrow: "Yassia, copilote IA", aiTitle: "Une question. Trois angles de décision.", aiText: "Yassia ne se contente pas de reformuler vos chiffres. Elle choisit les outils utiles, prépare le contexte puis répond selon votre objectif.", aiLink: "Comprendre le fonctionnement de l’IA", personas: [["Prudence", "Sécuriser", "Repère les tensions, les anomalies et les décisions qui peuvent attendre."], ["Pilotage", "Arbitrer", "Structure le point de gestion, hiérarchise les actions et explique les écarts."], ["Croissance", "Projeter", "Explore la capacité d’investissement et les scénarios de développement."]],
+    ctaTitle: "Commencez avec ce que vous avez déjà : un relevé CSV.", ctaText: "Créez votre espace, choisissez votre usage et obtenez une première lecture en quelques minutes.",
   },
-  {
-    name: "Business",
-    price: "99",
-    desc: "Pour les PME en croissance.",
-    cta: "Démarrer l'essai",
-    highlighted: true,
-    features: [
-      "Comptes bancaires illimités",
-      "Copilote IA illimité",
-      "Budgets & alertes",
-      "Prévisions de trésorerie à 3 mois",
-      "Jusqu'à 5 utilisateurs",
-      "Historique illimité",
-    ],
+  en: {
+    heroA: "Understand today.", heroB: "Decide tomorrow.", heroText: "AskFinance turns statements and commitments into concrete decisions. Manage a budget, balance a group or run a business.", create: "Create my workspace", choose: "Choose my use case", beta: "Free beta · No payment card · No bank connection",
+    strip: ["CSV import", "Monthly budgets", "Forecasts", "Receivables", "Workflows", "Tool-enabled AI"], perspectivesEyebrow: "Three perspectives", perspectivesTitle: "The same numbers do not tell everyone the same story.", discover: "Discover",
+    perspectives: [["B2C · Solo", "My money, finally clear", "Monthly budgets, spending, forecast balance and a personal coach based on your own data."], ["B2C · Group", "Shared accounts without tension", "Shared expenses, custom shares, member balances and confirmed or disputed settlements."], ["B2B · Business", "Cash flow you can steer", "Forecasts, receivables, indicative tax, workflows, audit and an AI copilot for small businesses."]],
+    chainEyebrow: "From file to action", chainTitle: "A complete financial chain, without a black box.", chainText: "Every feature supports an observable step in financial management.", allFeatures: "See all features",
+    capabilities: [["Import without linking your bank", "CSV statements pass through private storage and are deleted after processing."], ["Categorize and learn", "Correct a category once and the rule is suggested on future imports."], ["Look beyond the balance", "30, 60 or 90-day forecasts with recurring charges and scenarios."], ["Handle what matters", "One inbox brings together anomalies, budgets, overdue invoices and deadlines."], ["Collaborate with clear roles", "Read-only access, contribution, administration, approvals and an audit log."], ["Ask Yassia", "The AI calls only the tools it needs and answers from your workspace."]],
+    aiEyebrow: "Yassia, AI copilot", aiTitle: "One question. Three decision angles.", aiText: "Yassia does more than rephrase your numbers. It selects useful tools, prepares context and answers according to your objective.", aiLink: "See how the AI works", personas: [["Caution", "Protect", "Finds cash pressure, anomalies and decisions that can wait."], ["Management", "Arbitrate", "Structures the review, prioritizes actions and explains variances."], ["Growth", "Project", "Explores investment capacity and growth scenarios."]],
+    ctaTitle: "Start with what you already have: a CSV statement.", ctaText: "Create a workspace, choose your use case and get a first reading in minutes.",
   },
-  {
-    name: "Premium",
-    price: "199",
-    desc: "Pour les PME structurées et multi-sociétés.",
-    cta: "Nous contacter",
-    highlighted: false,
-    features: [
-      "Tout le plan Business",
-      "Multi-sociétés consolidées",
-      "Rôles & accès avancés",
-      "Utilisateurs illimités",
-      "Accompagnement dédié",
-    ],
+  uk: {
+    heroA: "Розумійте сьогодні.", heroB: "Вирішуйте завтра.", heroText: "AskFinance перетворює виписки й зобов’язання на конкретні рішення. Керуйте особистим бюджетом, групою або бізнесом.", create: "Створити простір", choose: "Обрати сценарій", beta: "Безкоштовна бета · Без картки · Без підключення банку",
+    strip: ["Імпорт CSV", "Місячні бюджети", "Прогнози", "Надходження", "Процеси", "ШІ з інструментами"], perspectivesEyebrow: "Три погляди", perspectivesTitle: "Ті самі цифри розповідають різні історії різним людям.", discover: "Докладніше",
+    perspectives: [["B2C · Особисто", "Мої гроші нарешті зрозумілі", "Місячні бюджети, витрати, прогноз залишку й персональний помічник на основі ваших даних."], ["B2C · Група", "Спільні витрати без напруги", "Спільні витрати, власні частки, баланси учасників і підтверджені або оскаржені розрахунки."], ["B2B · Бізнес", "Керована ліквідність", "Прогнози, надходження, орієнтовні податки, процеси, аудит і ШІ-помічник для малого бізнесу."]],
+    chainEyebrow: "Від файлу до дії", chainTitle: "Повний фінансовий ланцюжок без чорної скриньки.", chainText: "Кожна функція підтримує конкретний етап фінансового керування.", allFeatures: "Усі можливості",
+    capabilities: [["Імпорт без підключення банку", "CSV-виписки проходять через приватне сховище й видаляються після обробки."], ["Категоризація, що навчається", "Виправте категорію один раз. Правило буде запропоновано для наступних імпортів."], ["Більше, ніж поточний баланс", "Прогнози на 30, 60 або 90 днів з регулярними витратами й сценаріями."], ["Працюйте з важливим", "Одна скринька збирає аномалії, бюджети, прострочення та строки."], ["Співпраця з чіткими ролями", "Перегляд, участь, адміністрування, погодження та журнал аудиту."], ["Запитайте Yassia", "ШІ викликає лише потрібні інструменти й відповідає на основі вашого простору."]],
+    aiEyebrow: "Yassia, ШІ-помічник", aiTitle: "Одне питання. Три кути рішення.", aiText: "Yassia не просто переказує цифри: обирає інструменти, готує контекст і відповідає відповідно до вашої мети.", aiLink: "Як працює ШІ", personas: [["Обережність", "Захистити", "Виявляє ризики ліквідності, аномалії та рішення, які можуть зачекати."], ["Керування", "Збалансувати", "Структурує огляд, визначає пріоритети й пояснює відхилення."], ["Зростання", "Спрогнозувати", "Досліджує інвестиційну спроможність і сценарії розвитку."]],
+    ctaTitle: "Почніть із того, що вже маєте: CSV-виписки.", ctaText: "Створіть простір, оберіть сценарій і отримайте перший огляд за кілька хвилин.",
   },
-];
-
-const testimonials = [
-  {
-    quote:
-      "On a divisé par trois le temps passé sur notre clôture mensuelle. Le copilote répond en quelques secondes à des questions qui nous prenaient des heures.",
-    name: "Léa Fontaine",
-    role: "DAF, Studio Marbre",
-  },
-  {
-    quote:
-      "Je pilote enfin ma trésorerie en temps réel. Les alertes m'ont évité deux découverts ce trimestre.",
-    name: "Karim Benali",
-    role: "Gérant, Benali & Fils",
-  },
-  {
-    quote:
-      "Les prévisions à 3 mois nous aident à décider quand investir. Indispensable pour une PME comme la nôtre.",
-    name: "Sophie Renaud",
-    role: "Cofondatrice, Lefèvre & Cie",
-  },
-];
+} as const;
 
 export default function LandingPage() {
+  const { locale } = useI18n();
+  const copy = landingCopy[locale];
+  const perspectives = perspectiveMeta.map(([icon, href, color], index) => ({ icon, href, color, eyebrow: copy.perspectives[index][0], title: copy.perspectives[index][1], description: copy.perspectives[index][2] }));
+  const capabilities = capabilityIcons.map((Icon, index) => [Icon, copy.capabilities[index][0], copy.capabilities[index][1]] as const);
+  const personas = copy.personas;
   return (
-    <div className="flex min-h-screen flex-col bg-background">
-      <SiteHeader />
-
-      <main className="flex-1">
-        {/* Hero */}
-        <section className="relative overflow-hidden">
-          <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(60%_50%_at_50%_0%,hsl(243_75%_59%/0.10),transparent)]" />
-          <div className="mx-auto max-w-6xl px-4 pb-20 pt-16 sm:px-6 sm:pt-24">
-            <div className="mx-auto max-w-3xl text-center">
-              <Badge variant="teal" className="mb-5">
-                <Sparkles className="mr-1 h-3 w-3" />
-                Nouveau · Copilote de trésorerie par IA
-              </Badge>
-              <h1 className="text-balance text-4xl font-bold tracking-tight text-foreground sm:text-6xl">
-                Votre copilote de trésorerie
-              </h1>
-              <p className="mx-auto mt-6 max-w-2xl text-balance text-lg text-muted-foreground">
-                Importez vos relevés, suivez vos dépenses et pilotez la
-                trésorerie de votre entreprise avec une IA qui comprend vos
-                finances. Pensé pour les TPE et PME.
-              </p>
-              <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
-                <Button size="lg" asChild>
-                  <Link href="/signup">
-                    Démarrer gratuitement
-                    <ArrowRight className="h-4 w-4" />
-                  </Link>
-                </Button>
-                <Button size="lg" variant="outline" asChild>
-                  <Link href="/dashboard">Voir une démo</Link>
-                </Button>
-              </div>
-              <p className="mt-4 text-sm text-muted-foreground">
-                Sans carte bancaire · Configuration en 2 minutes
-              </p>
-            </div>
-
-            {/* Aperçu produit */}
-            <div className="mx-auto mt-16 max-w-5xl">
-              <div className="rounded-2xl border bg-card p-2 shadow-2xl shadow-primary/5">
-                <div className="overflow-hidden rounded-xl border bg-gradient-to-b from-muted/50 to-background">
-                  <div className="flex items-center gap-1.5 border-b bg-muted/40 px-4 py-3">
-                    <span className="h-3 w-3 rounded-full bg-red-400" />
-                    <span className="h-3 w-3 rounded-full bg-amber-400" />
-                    <span className="h-3 w-3 rounded-full bg-emerald-400" />
-                    <span className="ml-3 text-xs text-muted-foreground">
-                      app.askfinance.ai/dashboard
-                    </span>
-                  </div>
-                  <div className="grid gap-4 p-6 sm:grid-cols-3">
-                    {[
-                      { l: "Trésorerie", v: "48 250 €", c: "text-foreground" },
-                      { l: "Dépenses", v: "18 940 €", c: "text-foreground" },
-                      { l: "Marge nette", v: "39,3 %", c: "text-teal" },
-                    ].map((s) => (
-                      <div
-                        key={s.l}
-                        className="rounded-xl border bg-card p-4 text-left"
-                      >
-                        <p className="text-xs text-muted-foreground">{s.l}</p>
-                        <p className={`mt-1 text-2xl font-bold ${s.c}`}>
-                          {s.v}
-                        </p>
-                      </div>
-                    ))}
-                    <div className="col-span-full flex h-40 items-end gap-2 rounded-xl border bg-card p-4">
-                      {[40, 65, 50, 80, 60, 90, 70, 95, 75, 85, 100, 88].map(
-                        (h, i) => (
-                          <div
-                            key={i}
-                            className="flex-1 rounded-t bg-gradient-to-t from-primary/30 to-primary"
-                            style={{ height: `${h}%` }}
-                          />
-                        )
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* Preuve sociale */}
-        <section className="border-y bg-muted/30 py-10">
-          <div className="mx-auto max-w-6xl px-4 sm:px-6">
-            <p className="text-center text-sm font-medium uppercase tracking-wider text-muted-foreground">
-              Ils pilotent leur trésorerie avec AskFinance AI
+    <PublicShell>
+      <section className="public-grid relative overflow-hidden">
+        <div className="public-glow pointer-events-none absolute inset-0" />
+        <div className="relative mx-auto max-w-7xl px-4 pb-24 pt-16 sm:px-6 sm:pt-24 lg:px-8">
+          <Reveal className="mx-auto max-w-4xl text-center">
+            <h1 className="text-balance text-5xl font-semibold tracking-[-0.055em] text-white sm:text-7xl">
+              {copy.heroA}
+              <span className="hero-gradient-text block">
+                {copy.heroB}
+              </span>
+            </h1>
+            <p className="mx-auto mt-7 max-w-3xl text-balance text-lg leading-8 text-slate-300 sm:text-xl">
+              {copy.heroText}
             </p>
-            <div className="mt-6 flex flex-wrap items-center justify-center gap-x-12 gap-y-4 text-lg font-semibold text-muted-foreground/70">
-              <span>Studio Marbre</span>
-              <span>Atelier Caron</span>
-              <span>Lefèvre &amp; Cie</span>
-              <span>Maison Pichard</span>
-              <span>Groupe Renaud</span>
+            <div className="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row">
+              <Button size="lg" asChild className="bg-white text-slate-950 hover:bg-slate-100">
+                <Link href="/signup">{copy.create} <ArrowRight className="h-4 w-4" /></Link>
+              </Button>
+              <Button
+                size="lg"
+                variant="outline"
+                asChild
+                className="border-2 border-primary/35 bg-indigo-50/90 text-primary shadow-lg shadow-primary/10 hover:border-primary/60 hover:bg-indigo-100 hover:text-primary dark:border-white/30 dark:bg-white/10 dark:text-white dark:shadow-black/20 dark:hover:border-white/50 dark:hover:bg-white/15 dark:hover:text-white"
+              >
+                <Link href="/solutions">{copy.choose}</Link>
+              </Button>
             </div>
-          </div>
-        </section>
+            <p className="mt-4 text-sm text-slate-500">{copy.beta}</p>
+          </Reveal>
 
-        {/* Fonctionnalités */}
-        <section id="fonctionnalites" className="py-20 sm:py-28">
-          <div className="mx-auto max-w-6xl px-4 sm:px-6">
-            <div className="mx-auto max-w-2xl text-center">
-              <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
-                Tout ce qu'il faut pour piloter votre trésorerie
-              </h2>
-              <p className="mt-4 text-lg text-muted-foreground">
-                Une plateforme pensée pour les dirigeants et les équipes finance
-                des TPE et PME.
-              </p>
+          <Reveal className="mt-16" delay={0.1}>
+            <ProductPreview />
+          </Reveal>
+        </div>
+      </section>
+
+      <section className="border-y border-white/10 bg-white/[0.025]">
+        <div className="mx-auto grid max-w-7xl gap-px bg-white/10 sm:grid-cols-3 lg:grid-cols-6">
+          {copy.strip.map((item) => (
+            <div key={item} className="flex items-center justify-center gap-2 bg-slate-950 px-4 py-5 text-center text-xs font-medium text-slate-400">
+              <CheckCircle2 className="h-3.5 w-3.5 text-teal" /> {item}
             </div>
-            <div className="mt-14 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-              {features.map((f) => (
-                <Card
-                  key={f.title}
-                  className="p-6 transition-shadow hover:shadow-md"
-                >
-                  <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                    <f.icon className="h-5 w-5" />
+          ))}
+        </div>
+      </section>
+
+      <section className="bg-slate-950 py-24 sm:py-32">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <Reveal className="max-w-3xl">
+            <p className="text-sm font-semibold uppercase tracking-[0.2em] text-teal">{copy.perspectivesEyebrow}</p>
+            <h2 className="mt-4 text-balance text-3xl font-semibold tracking-tight text-white sm:text-5xl">
+              {copy.perspectivesTitle}
+            </h2>
+          </Reveal>
+          <div className="mt-14 grid gap-5 lg:grid-cols-3">
+            {perspectives.map((item, index) => (
+              <Reveal key={item.title} delay={index * 0.07}>
+                <Link href={item.href} className="group block h-full rounded-2xl border border-white/10 bg-white/[0.035] p-6 transition hover:-translate-y-1 hover:border-white/20 hover:bg-white/[0.055]">
+                  <div className={`flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br ${item.color}`}>
+                    <item.icon className="h-5 w-5" />
                   </div>
-                  <h3 className="mt-4 text-lg font-semibold">{f.title}</h3>
-                  <p className="mt-2 text-sm text-muted-foreground">{f.desc}</p>
-                </Card>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        {/* Témoignages */}
-        <section id="temoignages" className="border-y bg-muted/30 py-20 sm:py-28">
-          <div className="mx-auto max-w-6xl px-4 sm:px-6">
-            <div className="mx-auto max-w-2xl text-center">
-              <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
-                Adopté par les dirigeants de TPE et PME
-              </h2>
-            </div>
-            <div className="mt-14 grid gap-6 lg:grid-cols-3">
-              {testimonials.map((t) => (
-                <Card key={t.name} className="flex flex-col p-6">
-                  <p className="flex-1 text-sm leading-relaxed text-foreground">
-                    « {t.quote} »
-                  </p>
-                  <div className="mt-6 flex items-center gap-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-primary to-teal text-sm font-semibold text-white">
-                      {t.name
-                        .split(" ")
-                        .map((n) => n[0])
-                        .join("")}
-                    </div>
-                    <div>
-                      <p className="text-sm font-semibold">{t.name}</p>
-                      <p className="text-xs text-muted-foreground">{t.role}</p>
-                    </div>
-                  </div>
-                </Card>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        {/* Tarifs */}
-        <section id="tarifs" className="py-20 sm:py-28">
-          <div className="mx-auto max-w-6xl px-4 sm:px-6">
-            <div className="mx-auto max-w-2xl text-center">
-              <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
-                Des tarifs adaptés à votre entreprise
-              </h2>
-              <p className="mt-4 text-lg text-muted-foreground">
-                Choisissez le plan qui correspond à la taille de votre structure.
-              </p>
-            </div>
-            <div className="mt-14 grid items-start gap-6 lg:grid-cols-3">
-              {plans.map((plan) => (
-                <Card
-                  key={plan.name}
-                  className={
-                    plan.highlighted
-                      ? "relative border-primary shadow-lg ring-1 ring-primary"
-                      : "relative"
-                  }
-                >
-                  {plan.highlighted && (
-                    <Badge className="absolute -top-3 left-1/2 -translate-x-1/2">
-                      Le plus populaire
-                    </Badge>
-                  )}
-                  <div className="p-6">
-                    <h3 className="text-lg font-semibold">{plan.name}</h3>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      {plan.desc}
-                    </p>
-                    <div className="mt-5 flex items-baseline gap-1">
-                      <span className="text-4xl font-bold tracking-tight">
-                        {plan.price} €
-                      </span>
-                      <span className="text-sm text-muted-foreground">/mois</span>
-                    </div>
-                    <Button
-                      asChild
-                      className="mt-6 w-full"
-                      variant={plan.highlighted ? "default" : "outline"}
-                    >
-                      <Link href="/signup">{plan.cta}</Link>
-                    </Button>
-                    <ul className="mt-6 space-y-3">
-                      {plan.features.map((feat) => (
-                        <li
-                          key={feat}
-                          className="flex items-start gap-2 text-sm"
-                        >
-                          <Check className="mt-0.5 h-4 w-4 shrink-0 text-teal" />
-                          <span>{feat}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                </Card>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        {/* CTA final */}
-        <section className="py-20">
-          <div className="mx-auto max-w-6xl px-4 sm:px-6">
-            <div className="overflow-hidden rounded-3xl bg-gradient-to-br from-primary to-teal px-6 py-16 text-center shadow-xl sm:px-16">
-              <h2 className="text-balance text-3xl font-bold tracking-tight text-white sm:text-4xl">
-                Reprenez le contrôle de votre trésorerie
-              </h2>
-              <p className="mx-auto mt-4 max-w-xl text-balance text-white/85">
-                Rejoignez des centaines de TPE et PME qui pilotent leurs finances
-                avec sérénité.
-              </p>
-              <div className="mt-8 flex justify-center">
-                <Button size="lg" variant="secondary" asChild>
-                  <Link href="/signup">
-                    Créer mon compte
-                    <ArrowRight className="h-4 w-4" />
-                  </Link>
-                </Button>
-              </div>
-            </div>
-          </div>
-        </section>
-      </main>
-
-      {/* Footer */}
-      <footer className="border-t bg-muted/30">
-        <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6">
-          <div className="flex flex-col justify-between gap-8 md:flex-row">
-            <div className="max-w-xs">
-              <Logo />
-              <p className="mt-4 text-sm text-muted-foreground">
-                Le copilote de trésorerie des TPE et PME.
-              </p>
-            </div>
-            <div className="grid grid-cols-2 gap-8 sm:grid-cols-3">
-              {[
-                {
-                  title: "Produit",
-                  links: ["Fonctionnalités", "Tarifs", "Sécurité"],
-                },
-                {
-                  title: "Société",
-                  links: ["À propos", "Blog", "Carrières"],
-                },
-                { title: "Légal", links: ["CGU", "Confidentialité", "RGPD"] },
-              ].map((col) => (
-                <div key={col.title}>
-                  <p className="text-sm font-semibold">{col.title}</p>
-                  <ul className="mt-3 space-y-2">
-                    {col.links.map((l) => (
-                      <li key={l}>
-                        <Link
-                          href="#"
-                          className="text-sm text-muted-foreground hover:text-foreground"
-                        >
-                          {l}
-                        </Link>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ))}
-            </div>
-          </div>
-          <div className="mt-10 border-t pt-6 text-center text-sm text-muted-foreground">
-            © 2026 AskFinance AI SAS — Tous droits réservés.
+                  <p className="mt-6 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">{item.eyebrow}</p>
+                  <h3 className="mt-2 text-xl font-semibold text-white">{item.title}</h3>
+                  <p className="mt-3 text-sm leading-6 text-slate-400">{item.description}</p>
+                  <span className="mt-6 inline-flex items-center gap-1 text-sm font-medium text-slate-200 group-hover:text-white">
+                    {copy.discover} <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+                  </span>
+                </Link>
+              </Reveal>
+            ))}
           </div>
         </div>
-      </footer>
-    </div>
+      </section>
+
+      <section className="border-y border-white/10 bg-slate-900/50 py-24 sm:py-32">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <Reveal className="mx-auto max-w-3xl text-center">
+            <p className="text-sm font-semibold uppercase tracking-[0.2em] text-teal">{copy.chainEyebrow}</p>
+            <h2 className="mt-4 text-balance text-3xl font-semibold tracking-tight text-white sm:text-5xl">
+              {copy.chainTitle}
+            </h2>
+            <p className="mt-5 text-lg text-slate-400">{copy.chainText}</p>
+          </Reveal>
+          <div className="mt-14 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {capabilities.map(([Icon, title, description], index) => (
+              <Reveal key={title} delay={(index % 3) * 0.06} className="rounded-2xl border border-white/10 bg-slate-950/70 p-6">
+                <Icon className="h-5 w-5 text-teal" />
+                <h3 className="mt-5 font-semibold text-white">{title}</h3>
+                <p className="mt-2 text-sm leading-6 text-slate-400">{description}</p>
+              </Reveal>
+            ))}
+          </div>
+          <div className="mt-10 text-center">
+            <Button variant="outline" asChild className="border-white/15 bg-white/5 text-white hover:bg-white/10 hover:text-white">
+              <Link href="/features">{copy.allFeatures} <ArrowRight className="h-4 w-4" /></Link>
+            </Button>
+          </div>
+        </div>
+      </section>
+
+      <section className="bg-slate-950 py-24 sm:py-32">
+        <div className="mx-auto grid max-w-7xl gap-12 px-4 sm:px-6 lg:grid-cols-[0.85fr_1.15fr] lg:px-8">
+          <Reveal>
+            <p className="text-sm font-semibold uppercase tracking-[0.2em] text-teal">{copy.aiEyebrow}</p>
+            <h2 className="mt-4 text-balance text-3xl font-semibold tracking-tight text-white sm:text-5xl">
+              {copy.aiTitle}
+            </h2>
+            <p className="mt-5 text-lg leading-8 text-slate-400">
+              {copy.aiText}
+            </p>
+            <Button asChild className="mt-8 bg-white text-slate-950 hover:bg-slate-100">
+              <Link href="/ai">{copy.aiLink} <ArrowRight className="h-4 w-4" /></Link>
+            </Button>
+          </Reveal>
+          <div className="grid gap-4">
+            {personas.map(([name, verb, description], index) => (
+              <Reveal key={name} delay={index * 0.08} className="grid gap-4 rounded-2xl border border-white/10 bg-white/[0.035] p-5 sm:grid-cols-[140px_1fr] sm:items-center">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-teal">{verb}</p>
+                  <p className="mt-1 text-lg font-semibold text-white">{name}</p>
+                </div>
+                <p className="text-sm leading-6 text-slate-400">{description}</p>
+              </Reveal>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="public-always-white border-t border-white/10 bg-gradient-to-br from-indigo-600 via-primary to-teal px-4 py-20 sm:px-6">
+        <Reveal className="mx-auto max-w-3xl text-center">
+          <h2 className="text-balance text-3xl font-semibold tracking-tight text-white sm:text-5xl">
+            {copy.ctaTitle}
+          </h2>
+          <p className="mx-auto mt-5 max-w-2xl text-lg text-white/80">
+            {copy.ctaText}
+          </p>
+          <Button size="lg" variant="secondary" asChild className="mt-8">
+            <Link href="/signup">{copy.create} <ArrowRight className="h-4 w-4" /></Link>
+          </Button>
+        </Reveal>
+      </section>
+    </PublicShell>
   );
 }

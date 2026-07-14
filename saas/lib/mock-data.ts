@@ -1,4 +1,4 @@
-// Données fictives — aucune source externe, tout est codé en dur.
+// Données fictives. Aucune source externe, tout est codé en dur.
 
 export const company = {
   name: "Atelier Dupont SARL",
@@ -117,26 +117,26 @@ export const categories = [
 ];
 
 export const transactions: Transaction[] = [
-  { id: "TX-1042", date: "10/06/2026", merchant: "Virement client — Lefèvre & Cie", category: "Revenus", account: "Compte courant Pro", amount: 6800, type: "credit", status: "Validé" },
+  { id: "TX-1042", date: "10/06/2026", merchant: "Virement client, Lefèvre & Cie", category: "Revenus", account: "Compte courant Pro", amount: 6800, type: "credit", status: "Validé" },
   { id: "TX-1041", date: "09/06/2026", merchant: "OVHcloud", category: "Logiciels & SaaS", account: "Carte Pro Visa", amount: -89.9, type: "debit", status: "Validé" },
   { id: "TX-1040", date: "09/06/2026", merchant: "SNCF Connect", category: "Déplacements", account: "Carte Pro Visa", amount: -154.0, type: "debit", status: "Validé" },
   { id: "TX-1039", date: "08/06/2026", merchant: "Métro Cash & Carry", category: "Fournisseurs", account: "Compte courant Pro", amount: -512.34, type: "debit", status: "Validé" },
   { id: "TX-1038", date: "07/06/2026", merchant: "Google Workspace", category: "Logiciels & SaaS", account: "Carte Pro Visa", amount: -57.6, type: "debit", status: "Validé" },
   { id: "TX-1037", date: "06/06/2026", merchant: "URSSAF", category: "Impôts & taxes", account: "Compte courant Pro", amount: -2340.0, type: "debit", status: "Validé" },
-  { id: "TX-1036", date: "05/06/2026", merchant: "La Poste — Colissimo", category: "Fournisseurs", account: "Carte Pro Visa", amount: -78.2, type: "debit", status: "Validé" },
-  { id: "TX-1035", date: "05/06/2026", merchant: "Virement client — Studio Marbre", category: "Revenus", account: "Compte courant Pro", amount: 4200, type: "credit", status: "Validé" },
+  { id: "TX-1036", date: "05/06/2026", merchant: "La Poste, Colissimo", category: "Fournisseurs", account: "Carte Pro Visa", amount: -78.2, type: "debit", status: "Validé" },
+  { id: "TX-1035", date: "05/06/2026", merchant: "Virement client, Studio Marbre", category: "Revenus", account: "Compte courant Pro", amount: 4200, type: "credit", status: "Validé" },
   { id: "TX-1034", date: "04/06/2026", merchant: "Boulangerie Pichard", category: "Restauration", account: "Carte Pro Visa", amount: -34.5, type: "debit", status: "Validé" },
-  { id: "TX-1033", date: "03/06/2026", merchant: "Loyer — SCI des Lilas", category: "Loyer & charges", account: "Compte courant Pro", amount: -2600.0, type: "debit", status: "Validé" },
+  { id: "TX-1033", date: "03/06/2026", merchant: "Loyer, SCI des Lilas", category: "Loyer & charges", account: "Compte courant Pro", amount: -2600.0, type: "debit", status: "Validé" },
   { id: "TX-1032", date: "03/06/2026", merchant: "LinkedIn Ads", category: "Marketing", account: "Carte Pro Visa", amount: -420.0, type: "debit", status: "Validé" },
-  { id: "TX-1031", date: "02/06/2026", merchant: "Salaires — Juin (lot)", category: "Salaires", account: "Compte courant Pro", amount: -8200.0, type: "debit", status: "Validé" },
+  { id: "TX-1031", date: "02/06/2026", merchant: "Salaires, juin (lot)", category: "Salaires", account: "Compte courant Pro", amount: -8200.0, type: "debit", status: "Validé" },
   { id: "TX-1030", date: "02/06/2026", merchant: "Total Énergies", category: "Loyer & charges", account: "Carte Pro Visa", amount: -186.7, type: "debit", status: "Validé" },
   { id: "TX-1029", date: "01/06/2026", merchant: "Notion Labs", category: "Logiciels & SaaS", account: "Carte Pro Visa", amount: -48.0, type: "debit", status: "En attente" },
   { id: "TX-1028", date: "31/05/2026", merchant: "Uber", category: "Déplacements", account: "Carte Pro Visa", amount: -27.4, type: "debit", status: "Validé" },
-  { id: "TX-1027", date: "30/05/2026", merchant: "Virement client — Atelier Caron", category: "Revenus", account: "Compte courant Pro", amount: 5100, type: "credit", status: "Validé" },
+  { id: "TX-1027", date: "30/05/2026", merchant: "Virement client, Atelier Caron", category: "Revenus", account: "Compte courant Pro", amount: 5100, type: "credit", status: "Validé" },
   { id: "TX-1026", date: "29/05/2026", merchant: "Amazon Business", category: "Fournisseurs", account: "Carte Pro Visa", amount: -243.18, type: "debit", status: "Validé" },
   { id: "TX-1025", date: "28/05/2026", merchant: "Adobe Creative Cloud", category: "Logiciels & SaaS", account: "Carte Pro Visa", amount: -71.99, type: "debit", status: "Validé" },
   { id: "TX-1024", date: "27/05/2026", merchant: "Restaurant Le Comptoir", category: "Restauration", account: "Carte Pro Visa", amount: -96.0, type: "debit", status: "Validé" },
-  { id: "TX-1023", date: "26/05/2026", merchant: "Free Pro — Fibre", category: "Loyer & charges", account: "Compte courant Pro", amount: -49.99, type: "debit", status: "Validé" },
+  { id: "TX-1023", date: "26/05/2026", merchant: "Free Pro, Fibre", category: "Loyer & charges", account: "Compte courant Pro", amount: -49.99, type: "debit", status: "Validé" },
   { id: "TX-1022", date: "25/05/2026", merchant: "Leroy Merlin", category: "Fournisseurs", account: "Carte Pro Visa", amount: -318.75, type: "debit", status: "Validé" },
   { id: "TX-1021", date: "24/05/2026", merchant: "Meta Ads", category: "Marketing", account: "Carte Pro Visa", amount: -510.0, type: "debit", status: "Validé" },
 ];
@@ -164,7 +164,7 @@ export const chatHistory: ChatMessage[] = [
     id: "m3",
     role: "assistant",
     content:
-      "Vos trois principaux postes de dépenses en juin sont :\n\n1. **Salaires** — 8 200 € (43 %)\n2. **Fournisseurs** — 4 100 € (22 %)\n3. **Loyer & charges** — 2 600 € (14 %)\n\nÀ noter : le poste Marketing (1 340 €) dépasse de 12 % le budget que vous aviez fixé. Voulez-vous que je détaille ?",
+      "Vos trois principaux postes de dépenses en juin sont :\n\n1. **Salaires** : 8 200 € (43 %)\n2. **Fournisseurs** : 4 100 € (22 %)\n3. **Loyer & charges** : 2 600 € (14 %)\n\nÀ noter : le poste Marketing (1 340 €) dépasse de 12 % le budget que vous aviez fixé. Voulez-vous que je détaille ?",
   },
 ];
 

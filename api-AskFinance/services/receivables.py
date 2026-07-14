@@ -37,7 +37,7 @@ def _relance_text(client: str, montant: float, jours_retard: int) -> str:
     """Brouillon de relance amiable, prêt à copier-coller (ton courtois, B2B)."""
     montant_fr = f"{montant:,.2f} €".replace(",", " ").replace(".", ",")
     return (
-        f"Objet : Relance — règlement en attente\n\n"
+        f"Objet : Relance pour règlement en attente\n\n"
         f"Bonjour,\n\n"
         f"Sauf erreur de notre part, nous n'avons pas encore reçu votre "
         f"règlement de {montant_fr}, attendu depuis {jours_retard} jour(s).\n\n"
@@ -98,9 +98,21 @@ def reconcile_receivables(expected: list[dict], transactions: list[dict], today:
         due = _to_date(e.get("due_date"))
         amount = abs(_to_float(e.get("amount")))
         client = str(e.get("client") or "")
-        idx = _find_match(credits, used, amount, due, merchant_key(client)) if due else None
+        manual_status = str(e.get("status") or "expected")
+        idx = _find_match(credits, used, amount, due, merchant_key(client)) if due and manual_status not in ("received", "cancelled") else None
 
-        if idx is not None:
+        if manual_status == "cancelled":
+            continue
+        if manual_status == "received":
+            statut, jours_retard = "received", 0
+            date_recu = str(e.get("received_at") or "")[:10] or None
+            relance = None
+        elif manual_status == "partial":
+            statut = "partial"
+            jours_retard = max(0, (today - due).days) if due else 0
+            date_recu = None
+            relance = _relance_text(client, max(0, amount - _to_float(e.get("paid_amount"))), jours_retard) if jours_retard else None
+        elif idx is not None:
             used.add(idx)
             statut, jours_retard = "received", 0
             date_recu = credits[idx]["date"].strftime("%Y-%m-%d")
@@ -116,6 +128,9 @@ def reconcile_receivables(expected: list[dict], transactions: list[dict], today:
         rows.append({
             "id": e.get("id"),
             "client": client,
+            "invoice_number": e.get("invoice_number"),
+            "contact_email": e.get("contact_email"),
+            "paid_amount": round(_to_float(e.get("paid_amount")), 2),
             "montant_attendu": round(amount, 2),
             "date_prevue": due.strftime("%Y-%m-%d") if due else None,
             "statut": statut,
@@ -124,13 +139,16 @@ def reconcile_receivables(expected: list[dict], transactions: list[dict], today:
             "relance": relance,
         })
 
-    order = {"late": 0, "upcoming": 1, "received": 2}
+    order = {"late": 0, "partial": 1, "upcoming": 2, "received": 3}
     rows.sort(key=lambda r: (order.get(r["statut"], 3), r["date_prevue"] or ""))
-    en_retard = [r for r in rows if r["statut"] == "late"]
+    en_retard = [r for r in rows if r["statut"] == "late" or (r["statut"] == "partial" and r["jours_retard"] > 0)]
     total_attendu = round(
-        sum(r["montant_attendu"] for r in rows if r["statut"] in ("late", "upcoming")), 2
+        sum(
+            r["montant_attendu"] - r["paid_amount"]
+            for r in rows if r["statut"] in ("late", "partial", "upcoming")
+        ), 2
     )
-    total_en_retard = round(sum(r["montant_attendu"] for r in en_retard), 2)
+    total_en_retard = round(sum(r["montant_attendu"] - r["paid_amount"] for r in en_retard), 2)
     return {
         "receivables": rows,
         "en_retard": en_retard,

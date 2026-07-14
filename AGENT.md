@@ -1,4 +1,4 @@
-# AGENT.md — AskFinance AI
+# AGENT.md | AskFinance AI
 
 Guide de contexte pour travailler sur ce projet (humain ou agent). Lis-le avant
 toute modification.
@@ -7,7 +7,7 @@ toute modification.
 
 ## 1. Le projet
 
-**AskFinance AI** — un **copilote de trésorerie** pour **TPE et PME** (positionnement **B2B**).
+**AskFinance AI** est un **copilote de trésorerie** pour **TPE et PME** (positionnement **B2B**).
 L'utilisateur importe ses relevés bancaires (CSV), visualise sa trésorerie, ses
 dépenses, ses charges récurrentes et une prévision, et (à terme) discute avec une IA.
 
@@ -30,7 +30,7 @@ askfinance-ai/
 
 - **`saas/`** : interface, authentification (Supabase Auth), lecture des données
   (Server Components via le client Supabase serveur), affichage des dashboards.
-- **`api-AskFinance/`** : tout ce qui est **analyse de données** — import CSV (pandas),
+- **`api-AskFinance/`** : tout ce qui est **analyse de données**, import CSV (pandas),
   charges récurrentes, prévision (scikit-learn), détection de virements.
 - **Supabase** : Postgres + Auth (email/mot de passe + Google) + RLS.
 
@@ -38,12 +38,19 @@ askfinance-ai/
 - **Supabase Auth = la seule autorité** d'authentification. Émet les tokens.
 - Le front utilise `@supabase/ssr` (cookies httpOnly). Google passe par `app/auth/callback`.
 - **L'API Python ne gère PAS le login** : elle **vérifie** le token reçu
-  (`supabase.auth.get_user(token)`) et récupère le `user_id`.
+  (`supabase.auth.get_claims(token)` : signature vérifiée **localement** via JWKS
+  mis en cache ; repli réseau `get_user` automatique si projet legacy HS256) et
+  récupère le `user_id`. L'appartenance à l'espace est ensuite vérifiée en base,
+  avec un cache mémoire court (60 s, succès uniquement) dans `controller/deps.py`.
 
 ### Flux de données
-- **Import & analyses** : navigateur → API FastAPI (`Authorization: Bearer <token>`) →
-  validation du token → pandas/ML → écriture en base avec la clé **service_role**
-  (qui contourne le RLS ; le `user_id` est posé depuis le token validé).
+- **Import** : navigateur → bucket Supabase Storage privé → API FastAPI
+  (`Authorization: Bearer <token>`) → téléchargement et traitement direct avec
+  pandas → écriture en base avec la clé **service_role** → suppression du fichier
+  temporaire. Aucun Redis ni worker Celery n'est requis.
+- **Analyses** : navigateur → API FastAPI → validation du token → pandas/ML →
+  lecture/écriture avec la clé **service_role** (qui contourne le RLS ; les droits
+  de l'espace sont donc toujours vérifiés explicitement).
 - **Lecture du dashboard** : Next.js (Server Components) lit Supabase via le client
   serveur → le **RLS** filtre par utilisateur.
 - **Comptes / imports (CRUD)** : gérés côté front via supabase-js (RLS).
@@ -59,16 +66,16 @@ askfinance-ai/
 | `accounts` | id, user_id, name, type, opening_balance | comptes bancaires de l'utilisateur (avec solde d'ouverture) |
 | `imports` | id, user_id, account_id, filename, count | un **lot d'import** (annulable) |
 | `transactions` | id, user_id, account_id, import_id, date, merchant, category, account, amount, type, status, is_transfer, fingerprint | voir ci-dessous |
-| `budgets` | id, user_id, category, amount | budget par catégorie |
+| `budgets` | id, workspace_id, category, month, amount | budget variable par catégorie et par mois ; unicité `(workspace_id, category, month)` |
 | `expected_receivables` | id, user_id, client, amount, due_date, note | échéancier des encaissements clients **déclarés** (RLS) ; rapprochés des crédits réels côté API |
 | `tax_settings` | id, user_id (unique), provision_tva_taux, provision_social_taux, provision_is_taux, tva_periodicite, urssaf_periodicite | coffre-fort fiscal : **taux de provision (% du CA)** + périodicités, paramétrés par l'utilisateur (RLS) |
 | `einvoice_checklist` | id, user_id, item_key, done, updated_at | checklist de préparation à la facture électronique (unique `(user_id, item_key)`, RLS) |
 | `conversations` | id, user_id, title, created_at, updated_at | une discussion du copilote IA (RLS) ; `updated_at` remonté par trigger à chaque message |
 | `messages` | id, conversation_id, user_id, role, content, created_at | messages d'une conversation (`role` = user/assistant) ; `on delete cascade` depuis `conversations` |
 
-**`transactions` — règles importantes :**
+**`transactions`, règles importantes :**
 - `amount` : `numeric(12,2)` (**jamais float**), négatif = débit.
-- `date` : type `date` (**pas d'heure** — la source CSV ne la fournit pas).
+- `date` : type `date` (**pas d'heure**, la source CSV ne la fournit pas).
 - `is_transfer` : virement interne → **exclu des KPIs/analyses**, mais **compté dans les soldes**.
 - `fingerprint` : `date|montant|libellé|référence|n°occurrence` → anti-doublon.
 - Index **unique `(user_id, account_id, fingerprint)`** → l'upsert ignore les doublons
@@ -81,11 +88,35 @@ Le SQL de migration complet est dans l'historique ; refléter tout changement de
 
 ---
 
-## 4. Avancement (au 2026-06-25)
+## 4. Avancement (au 2026-07-14)
 
 ### ✅ Fait
+- **Site public multi-segment** : accueil premium et pages Fonctionnalités,
+  Solutions Solo/Groupe/Entreprise, Yassia IA et Sécurité ; navigation responsive
+  et animations accessibles avec Motion. Les allégations non démontrées et faux
+  témoignages ont été retirés.
+- **Pages légales publiques** : mentions légales, confidentialité et CGU reliées
+  à l'inscription. Les identités juridiques, coordonnées et hébergeurs manquants
+  restent explicitement marqués à compléter avant publication commerciale.
+- **Permissions par rôle** : `viewer` en lecture seule ; `member` contribue ;
+  `admin`/`owner` valident les workflows et administrent les rôles. Les écritures
+  sensibles workflow/audit passent uniquement par les actions serveur.
+- **Workflows & audit** : demandes de validation, approbation/refus par responsable,
+  changement de rôle hiérarchisé et journal immuable des actions sensibles.
+- **Cycle facture → paiement → relance** : numéro de facture et contact, règlements
+  complets ou partiels, reste à encaisser, brouillons/relances envoyées et audit.
+- **Catégorisation apprenante** : correction manuelle + règle de libellé appliquée
+  automatiquement aux prochains imports.
+- **Budgets mensuels variables** : montants par catégorie et par mois, modification
+  directe et reprise des catégories du mois précédent.
+- **Inbox financière** : découvert, impayés, budgets, récurrents et fiscalité réunis,
+  avec résolution et report persistants.
+- **Cohérence multi-produit** : Yassia B2B dans `business`, coach financier sans
+  outils fiscaux dans `personal`, masquée/refusée dans `group` tant qu'aucun outil
+  dédié au registre partagé n'existe.
 - **Auth** : email/mot de passe + Google (OAuth), profils (nom/prénom auto).
-- **Import CSV** (Python/pandas) : auto-détection séparateur, formats FR (Débit/Crédit,
+- **Import CSV direct, sans Redis/Celery** (Python/pandas, limite 10 Mo) : transit
+  par le bucket Storage privé, auto-détection séparateur, formats FR (Débit/Crédit,
   virgule décimale, dates JJ/MM/AAAA), dédoublonnage (fingerprint + index d'occurrence),
   **popup d'import** (choix/création de compte), **lots annulables**.
 - **Dashboard** : KPIs (solde de trésorerie, dépenses, revenus, **marge nette**),
@@ -107,7 +138,7 @@ Le SQL de migration complet est dans l'historique ; refléter tout changement de
 - **Coffre-fort fiscal** (Python) : provision recommandée (**% du CA** par poste TVA/URSSAF/IS)
   + **échéances estimées** (calendrier FR usuel) **injectées dans la prévision** → l'alerte
   découvert tient enfin compte des charges fiscales. Réglages par utilisateur (`tax_settings`).
-  ⚠️ Montants **indicatifs** (taux paramétrés, pas de régime fiscal réel) — à valider en cabinet.
+  ⚠️ Montants **indicatifs** (taux paramétrés, pas de régime fiscal réel), à valider en cabinet.
 - **Préparation facture électronique 2026/2027** (front) : compte à rebours (réception
   01/09/2026, émission TPE-PME 01/09/2027), 4 nouvelles mentions obligatoires, **checklist
   persistée** (`einvoice_checklist`).
@@ -115,7 +146,7 @@ Le SQL de migration complet est dans l'historique ; refléter tout changement de
   désormais parler impayés/relances et provisions/échéances).
 
 ### ⏳ À faire
-- **Catégorisation IA** (LLM) des transactions « Non catégorisé » — mise de côté.
+- **Catégorisation IA** (LLM) des transactions « Non catégorisé », mise de côté.
 - **Copilote IA / chat** : architecture **agent à outils** + **historique persistant**
   (tables `conversations`/`messages`, fenêtre de contexte) en place (voir §8).
   ✅ **Validé en live (2026-06-27)** : appel Interactions API + function-calling (le
@@ -177,9 +208,10 @@ npm run dev                 # .env.local : NEXT_PUBLIC_SUPABASE_URL / _ANON_KEY 
 ### Endpoints API (`/transactions` sauf `/health`)
 | Méthode | Route | Rôle |
 |---|---|---|
-| POST | `/transactions/import` | importer un relevé (form: `file`, `account_id`) |
+| POST | `/transactions/import` | importer directement un relevé déjà envoyé dans le bucket privé (`account_id`, `storage_path`, `filename`) |
 | GET | `/transactions/recurring` | charges récurrentes |
 | GET | `/transactions/forecast` | prévision 90 jours |
+| GET | `/transactions/pilotage` | **endpoint groupé** page Pilotage : `{forecast, recurring, receivables}` en un appel (une seule validation de token + une seule lecture des transactions), consommé via `PilotageProvider` (contexte React) côté front |
 | POST | `/transactions/detect-transfers` | apparier les virements internes |
 | GET | `/transactions/receivables` | radar des encaissements (recettes récurrentes + retards) |
 | GET | `/transactions/tax-vault` | coffre-fort fiscal (provision recommandée + échéances) |
@@ -199,14 +231,14 @@ npm run dev                 # .env.local : NEXT_PUBLIC_SUPABASE_URL / _ANON_KEY 
 ## 7. Stack technique
 
 - **Front** : Next.js 14 (App Router), React 18, TypeScript, Tailwind, composants
-  type shadcn (Radix), recharts, sonner (toasts), `@supabase/ssr`.
+  type shadcn (Radix), Motion for React, recharts, sonner (toasts), `@supabase/ssr`.
 - **API** : FastAPI, pandas, scikit-learn, supabase-py, uvicorn.
 - **Base / Auth** : Supabase (Postgres + Auth + RLS).
 - **Modèles IA** : Gemini côté API Python (`GEMINI_API_KEY`, `GEMINI_MODEL`, `GEMINI_FALLBACK_MODELS`) pour le copilote IA.
 
 ---
 
-## 8. Copilote IA — architecture (agent unique à outils)
+## 8. Copilote IA : architecture (agent unique à outils)
 
 Un **seul agent** (pas de multi-agents) qui décide lui-même quelles données aller
 chercher via le **function-calling** de l'Interactions API Gemini. Volontairement

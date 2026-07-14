@@ -1,3 +1,5 @@
+import { cache } from "react";
+
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 
@@ -16,10 +18,20 @@ export function createClient() {
             );
           } catch {
             // Appelé depuis un Server Component : Next.js interdit d'écrire un
-            // cookie ici. Ignorable — le middleware rafraîchit la session.
+            // cookie ici. Ignorable, le middleware rafraîchit la session.
           }
         },
       },
     }
   );
 }
+
+// Utilisateur connecté, mémoïsé par requête : `auth.getUser()` fait un
+// aller-retour réseau vers Supabase Auth. Sans ce cache, chaque helper
+// (profil, espaces, membres…) le repaierait, même lancés en parallèle.
+export const getAuthUser = cache(async () => {
+  const {
+    data: { user },
+  } = await createClient().auth.getUser();
+  return user;
+});

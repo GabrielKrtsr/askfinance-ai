@@ -1,4 +1,4 @@
--- Échéancier des encaissements clients (déclaratif) — 2026-06-29.
+-- Échéancier des encaissements clients (déclaratif), 2026-06-29.
 -- L'utilisateur déclare les virements qu'il attend ; on les rapproche ensuite des
 -- crédits réels (côté API Python). CRUD géré côté front via supabase-js (RLS),
 -- comme `budgets`. À exécuter dans le SQL editor de Supabase.

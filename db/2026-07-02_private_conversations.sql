@@ -1,5 +1,5 @@
 -- =============================================================================
--- Migration 2026-07-02 — conversations IA privées
+-- Migration 2026-07-02 : conversations IA privées
 -- Avant : tout membre actif d'un espace pouvait lire les conversations (et
 -- messages) des autres membres. Après : chacun ne voit que les siennes.
 -- À exécuter dans l'éditeur SQL Supabase.

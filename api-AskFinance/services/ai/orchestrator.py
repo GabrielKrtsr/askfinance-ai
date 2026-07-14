@@ -27,10 +27,10 @@ from services.ai.gemini_client import (
 from services.ai.personas import normalize_persona
 from services.ai.prompts import build_system_prompt
 from services.ai.tools import (
-    TOOL_DECLARATIONS,
     build_full_context,
     run_tool,
     tool_status_label,
+    tool_declarations_for,
 )
 
 MAX_TOOL_ROUNDS = 4
@@ -41,15 +41,16 @@ def answer_financial_question(
     message: str,
     persona_id: str,
     history: list[dict] | None = None,
+    workspace_type: str = "business",
 ) -> dict:
     """Point d'entrée non-streaming : applique le persona, fait tourner l'agent."""
     persona = normalize_persona(persona_id)
-    system = build_system_prompt(persona)
+    system = build_system_prompt(persona, workspace_type)
     history = history or []
     try:
-        answer = _run_agent_loop(workspace_id, message, system, history)
+        answer = _run_agent_loop(workspace_id, message, system, history, workspace_type)
     except GeminiCallError:
-        answer = _fallback_single_call(workspace_id, message, system, history)
+        answer = _fallback_single_call(workspace_id, message, system, history, workspace_type)
     return {"answer": answer, "advisor": persona}
 
 
@@ -58,6 +59,7 @@ def stream_financial_answer(
     message: str,
     persona_id: str,
     history: list[dict] | None = None,
+    workspace_type: str = "business",
 ):
     """Point d'entrée streaming. Générateur d'événements pour l'endpoint SSE :
       {"kind": "step", "label": ...}   pendant l'appel d'un outil
@@ -65,16 +67,17 @@ def stream_financial_answer(
       {"kind": "error", "message": ...}
     """
     persona = normalize_persona(persona_id)
-    system = build_system_prompt(persona)
+    system = build_system_prompt(persona, workspace_type)
     history = history or []
     input_items = _history_items(history) + [user_input_item(message)]
+    tool_declarations = tool_declarations_for(workspace_type)
     previous_id: str | None = None
     produced_text = False
 
     for _ in range(MAX_TOOL_ROUNDS):
         pending: list[dict] = []
         for event in stream_interaction(
-            system, input_items, tools=TOOL_DECLARATIONS, previous_interaction_id=previous_id
+            system, input_items, tools=tool_declarations, previous_interaction_id=previous_id
         ):
             kind = event["kind"]
             if kind == "interaction_id":
@@ -114,16 +117,17 @@ def _history_items(history: list[dict]) -> list[dict]:
     ]
 
 
-def _run_agent_loop(workspace_id: str, message: str, system: str, history: list[dict]) -> str:
+def _run_agent_loop(workspace_id: str, message: str, system: str, history: list[dict], workspace_type: str) -> str:
     """Boucle agent non-streaming : le modèle appelle des outils tant qu'il en a besoin."""
     input_items = _history_items(history) + [user_input_item(message)]
     previous_id: str | None = None
+    tool_declarations = tool_declarations_for(workspace_type)
 
     for _ in range(MAX_TOOL_ROUNDS):
         result = run_interaction(
             system,
             input_items,
-            tools=TOOL_DECLARATIONS,
+            tools=tool_declarations,
             previous_interaction_id=previous_id,
         )
         previous_id = result.get("interaction_id")
@@ -144,9 +148,9 @@ def _run_agent_loop(workspace_id: str, message: str, system: str, history: list[
     return result.get("text") or _empty_answer()
 
 
-def _fallback_single_call(workspace_id: str, message: str, system: str, history: list[dict]) -> str:
+def _fallback_single_call(workspace_id: str, message: str, system: str, history: list[dict], workspace_type: str) -> str:
     """Repli : un seul appel, tout le contexte injecté (ancien comportement)."""
-    context = build_full_context(workspace_id)
+    context = build_full_context(workspace_id, workspace_type)
     parts = ["Question utilisateur :", message, ""]
     if history:
         parts += [

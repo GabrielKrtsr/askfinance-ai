@@ -23,6 +23,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from controller.import_controller import router as import_router
 from controller.recurring_controller import router as recurring_router
 from controller.forecast_controller import router as forecast_router
+from controller.pilotage_controller import router as pilotage_router
 from controller.transfers_controller import router as transfers_router
 from controller.receivables_controller import router as receivables_router
 from controller.tax_controller import router as tax_router
@@ -49,6 +50,7 @@ app.add_middleware(
 app.include_router(import_router, prefix="/transactions", tags=["transactions"])
 app.include_router(recurring_router, prefix="/transactions", tags=["transactions"])
 app.include_router(forecast_router, prefix="/transactions", tags=["transactions"])
+app.include_router(pilotage_router, prefix="/transactions", tags=["transactions"])
 app.include_router(transfers_router, prefix="/transactions", tags=["transactions"])
 app.include_router(receivables_router, prefix="/transactions", tags=["transactions"])
 app.include_router(tax_router, prefix="/transactions", tags=["transactions"])

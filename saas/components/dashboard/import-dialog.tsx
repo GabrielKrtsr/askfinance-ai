@@ -47,6 +47,7 @@ export function ImportDialog() {
   const [newOpening, setNewOpening] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [importing, setImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState(0);
 
   async function refreshLists() {
     const [accs, imps] = await Promise.all([getAccounts(), getImports()]);
@@ -78,8 +79,10 @@ export function ImportDialog() {
 
     // 2. Importer
     setImporting(true);
-    const res = await importTransactionsFromCsv(file, accountId);
+    setImportProgress(0);
+    const res = await importTransactionsFromCsv(file, accountId, setImportProgress);
     setImporting(false);
+    setImportProgress(0);
 
     if (res.inserted > 0) {
       const notes: string[] = [];
@@ -223,7 +226,7 @@ export function ImportDialog() {
               disabled={importing}
             >
               {importing ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-              {importing ? "Import…" : "Importer"}
+              {importing ? `Import en cours… ${importProgress} %` : "Importer"}
             </Button>
 
             {/* Historique des imports */}

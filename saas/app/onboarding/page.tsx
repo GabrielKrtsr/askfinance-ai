@@ -93,7 +93,7 @@ export default function OnboardingPage() {
       </header>
 
       <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col justify-center px-4 py-10 sm:px-6">
-        {/* Étape 1 — Perso ou Pro */}
+        {/* Étape 1 : Perso ou Pro */}
         {step === "type" && (
           <div className="animate-fade-in">
             <h1 className="text-2xl font-bold tracking-tight">Que voulez-vous gérer ?</h1>
@@ -104,7 +104,7 @@ export default function OnboardingPage() {
               <ChoiceCard
                 icon={<User className="h-6 w-6" />}
                 title="Mes finances perso"
-                description="Budget, dépenses, épargne — pour vous seul."
+                description="Budget, dépenses et épargne pour vous seul."
                 onClick={() => go("personal")}
               />
               <ChoiceCard
@@ -116,7 +116,7 @@ export default function OnboardingPage() {
               <ChoiceCard
                 icon={<Building2 className="h-6 w-6" />}
                 title="Une entreprise"
-                description="Trésorerie, fiscalité, encaissements — en équipe."
+                description="Trésorerie, fiscalité et encaissements en équipe."
                 onClick={() => go("proChoice")}
               />
             </div>
@@ -132,7 +132,7 @@ export default function OnboardingPage() {
           </div>
         )}
 
-        {/* Étape 2a — Nom de l'espace perso */}
+        {/* Étape 2a : Nom de l'espace perso */}
         {step === "personal" && (
           <FormCard
             title="Nommez votre espace perso"
@@ -162,7 +162,7 @@ export default function OnboardingPage() {
           </FormCard>
         )}
 
-        {/* Étape 2c — Nom du groupe */}
+        {/* Étape 2c : Nom du groupe */}
         {step === "group" && (
           <FormCard
             title="Nommez votre groupe"
@@ -192,7 +192,7 @@ export default function OnboardingPage() {
           </FormCard>
         )}
 
-        {/* Étape 2b — Créer ou rejoindre une entreprise */}
+        {/* Étape 2b : Créer ou rejoindre une entreprise */}
         {step === "proChoice" && (
           <div className="animate-fade-in">
             <BackButton onClick={() => go("type")} />
@@ -217,7 +217,7 @@ export default function OnboardingPage() {
           </div>
         )}
 
-        {/* Étape 3a — Nom de l'entreprise */}
+        {/* Étape 3a : Nom de l'entreprise */}
         {step === "business" && (
           <FormCard
             title="Nom de l'entreprise"
@@ -247,7 +247,7 @@ export default function OnboardingPage() {
           </FormCard>
         )}
 
-        {/* Étape 3b — Rejoindre par code */}
+        {/* Étape 3b : Rejoindre par code */}
         {step === "join" && (
           <FormCard
             title="Rejoindre un espace"
@@ -278,7 +278,7 @@ export default function OnboardingPage() {
           </FormCard>
         )}
 
-        {/* Étape 4 — Demande envoyée, en attente de validation */}
+        {/* Étape 4 : Demande envoyée, en attente de validation */}
         {step === "pending" && (
           <Card className="animate-fade-in p-8 text-center">
             <span className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-teal/10 text-teal">

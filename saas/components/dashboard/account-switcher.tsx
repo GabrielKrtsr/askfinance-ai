@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Loader2, Plus } from "lucide-react";
+import { Loader2, Plus, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,15 +14,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { createAccount } from "@/lib/services/accounts";
+import { createAccount, deleteAccount, getAccountDeletionImpact } from "@/lib/services/accounts";
 import type { AccountOption } from "@/lib/data/dashboard";
 
 export function AccountSwitcher({
   accounts,
   selected,
+  canDelete,
 }: {
   accounts: AccountOption[];
   selected: string;
+  canDelete: boolean;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -31,6 +34,7 @@ export function AccountSwitcher({
   const [name, setName] = useState("");
   const [opening, setOpening] = useState("");
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   function navigate(account: string) {
     const p = new URLSearchParams(params.toString());
@@ -52,6 +56,26 @@ export function AccountSwitcher({
     setOpening("");
     navigate(acc.id);
     router.refresh();
+  }
+
+  async function handleDelete() {
+    if (selected === "all") return;
+    setDeleting(true);
+    try {
+      const impact = await getAccountDeletionImpact(selected);
+      const confirmation = window.prompt(
+        `Supprimer « ${impact.name} » supprimera définitivement ${impact.transactions} transaction(s) et ${impact.imports} import(s).\n\nSaisissez exactement le nom du compte pour confirmer :`
+      );
+      if (confirmation === null) return;
+      await deleteAccount(selected, confirmation);
+      toast.success(`Compte « ${impact.name} » supprimé`);
+      navigate("all");
+      router.refresh();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Suppression impossible.");
+    } finally {
+      setDeleting(false);
+    }
   }
 
   if (adding) {
@@ -103,6 +127,19 @@ export function AccountSwitcher({
       >
         <Plus className="h-4 w-4" />
       </Button>
+      {canDelete ? (
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={deleting || selected === "all"}
+          onClick={handleDelete}
+          aria-label="Supprimer le compte sélectionné"
+          title={selected === "all" ? "Sélectionnez un compte à supprimer" : "Supprimer le compte sélectionné"}
+          className="text-muted-foreground hover:border-red-200 hover:text-red-600"
+        >
+          {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+        </Button>
+      ) : null}
     </div>
   );
 }

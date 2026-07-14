@@ -77,6 +77,7 @@ export default async function DashboardPage({
           <AccountSwitcher
             accounts={data.accounts}
             selected={data.selectedAccount}
+            canDelete={workspace?.role === "owner" || workspace?.role === "admin"}
           />
           {data.months.length > 0 && (
             <MonthSelect months={data.months} selected={data.selectedMonth} />
@@ -97,7 +98,7 @@ export default async function DashboardPage({
                 {kpi.value}
               </p>
               <div className="mt-2 flex items-center gap-1.5 text-xs">
-                {kpi.delta !== "—" ? (
+                {kpi.delta !== "N/D" ? (
                   <>
                     <span
                       className={cn(
@@ -115,7 +116,7 @@ export default async function DashboardPage({
                     <span className="text-muted-foreground">{kpi.hint}</span>
                   </>
                 ) : (
-                  <span className="text-muted-foreground">—</span>
+                  <span className="text-muted-foreground">N/D</span>
                 )}
               </div>
             </CardContent>

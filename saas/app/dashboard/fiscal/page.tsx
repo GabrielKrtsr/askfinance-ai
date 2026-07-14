@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 
 import { TaxVault } from "@/components/dashboard/tax-vault";
 import { EInvoiceReadiness } from "@/components/dashboard/einvoice-readiness";
+import { CompanyProfile } from "@/components/dashboard/company-profile";
 import { getCurrentWorkspace } from "@/lib/data/workspace";
 import { getT } from "@/lib/i18n/server";
 
@@ -24,6 +25,7 @@ export default async function FiscalPage() {
         </p>
       </div>
 
+      <CompanyProfile workspaceId={workspaceId} />
       <TaxVault workspaceId={workspaceId} />
       <EInvoiceReadiness workspaceId={workspaceId} />
     </div>

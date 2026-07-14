@@ -100,14 +100,21 @@ def build_forecast(
     df["date"] = pd.to_datetime(df["date"], errors="coerce")
     df["amount"] = pd.to_numeric(df["amount"], errors="coerce")
     df = df.dropna(subset=["date", "amount"])
-    if "is_transfer" in df.columns:  # les virements internes ne sont pas des flux réels
-        df = df[~df["is_transfer"].fillna(False).astype(bool)]
     if df.empty:
         return _empty()
 
-    # Solde = solde d'ouverture des comptes + flux nets réels
+    # Le solde bancaire inclut les virements internes. Ils ne sont retirés
+    # qu'ensuite, pour ne pas les traiter comme des revenus ou des dépenses.
     solde_actuel = opening_balance + float(df["amount"].sum())
     last_date = df["date"].max().normalize()
+    analysis_df = df
+    if "is_transfer" in analysis_df.columns:
+        analysis_df = analysis_df[
+            ~analysis_df["is_transfer"].fillna(False).astype(bool)
+        ].copy()
+    if analysis_df.empty:
+        return {**_empty(), "solde_actuel": round(solde_actuel, 2)}
+    df = analysis_df
     # La projection démarre AUJOURD'HUI (pas à la dernière transaction) : si les
     # données ont du retard, « 90 jours » et « alerte 30 jours » restent ancrés
     # sur le présent au lieu de décrire une fenêtre déjà passée.

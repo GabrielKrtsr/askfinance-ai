@@ -23,21 +23,31 @@ import {
 } from "@/components/ui/card";
 import { formatDateFr, formatEUR } from "@/lib/utils";
 import { getForecast, type ForecastResult } from "@/lib/services/forecast";
+import { usePilotage } from "@/components/dashboard/pilotage-provider";
 
 const axisAmount = (v: number) =>
   Math.abs(v) >= 1000 ? `${(v / 1000).toFixed(1)}k` : `${Math.round(v)}`;
 
 export function ForecastChart({ workspaceId }: { workspaceId: string }) {
-  const [data, setData] = useState<ForecastResult | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
+  // Dans un PilotageProvider : données partagées (un seul appel API pour la
+  // page). Sinon : fetch autonome, comme avant.
+  const shared = usePilotage();
+  const isShared = shared !== null;
+  const [ownData, setOwnData] = useState<ForecastResult | null>(null);
+  const [ownLoading, setOwnLoading] = useState(true);
+  const [ownError, setOwnError] = useState(false);
 
   useEffect(() => {
+    if (isShared) return;
     getForecast(workspaceId)
-      .then(setData)
-      .catch(() => setError(true))
-      .finally(() => setLoading(false));
-  }, [workspaceId]);
+      .then(setOwnData)
+      .catch(() => setOwnError(true))
+      .finally(() => setOwnLoading(false));
+  }, [isShared, workspaceId]);
+
+  const data = shared ? (shared.data?.forecast ?? null) : ownData;
+  const loading = shared ? shared.loading : ownLoading;
+  const error = shared ? shared.error : ownError;
 
   const message = loading
     ? "Calcul de la prévision…"

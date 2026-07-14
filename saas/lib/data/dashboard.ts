@@ -1,6 +1,6 @@
 import { cache } from "react";
 
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getAuthUser } from "@/lib/supabase/server";
 import { getCurrentWorkspace, type WorkspaceType } from "@/lib/data/workspace";
 import { formatEUR, formatDateFr } from "@/lib/utils";
 import { type TFunc } from "@/lib/i18n/core";
@@ -18,7 +18,7 @@ export interface Profile {
 export interface Kpi {
   label: string;
   value: string;
-  delta: string; // "—" si non calculable
+  delta: string; // "N/D" si non calculable
   trend: "up" | "down"; // sens de la flèche (signe de la variation)
   positive: boolean; // la variation est-elle une bonne nouvelle ? (couleur)
   hint: string;
@@ -40,6 +40,7 @@ export interface BudgetRow {
   categorie: string;
   depense: number;
   budget: number;
+  month: string;
 }
 
 export interface RecentTransaction {
@@ -93,6 +94,8 @@ interface DbAccount {
   name: string;
   opening_balance: number;
 }
+
+const DASHBOARD_TRANSACTION_PAGE_SIZE = 1_000;
 
 // ---------- Constantes ----------
 
@@ -155,7 +158,7 @@ function buildKpi(
   opts: { lowerIsBetter?: boolean; hint?: string } = {}
 ): Kpi {
   if (deltaPct === null) {
-    return { label, value, delta: "—", trend: "up", positive: true, hint: "" };
+    return { label, value, delta: "N/D", trend: "up", positive: true, hint: "" };
   }
   const lowerIsBetter = opts.lowerIsBetter ?? false; // true pour les dépenses
   return {
@@ -205,12 +208,10 @@ function emptyKpis(
 
 // `cache` déduplique l'appel sur une même requête (layout + page).
 export const getProfile = cache(async (): Promise<Profile | null> => {
-  const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getAuthUser();
   if (!user) return null;
 
+  const supabase = createClient();
   const { data: profile } = await supabase
     .from("profiles")
     .select("first_name, last_name")
@@ -282,12 +283,19 @@ export async function getDashboardData(
     };
   }
 
-  // Comptes de l'espace (pour le sélecteur + soldes d'ouverture).
-  const { data: accountRows } = await supabase
-    .from("accounts")
-    .select("id, name, opening_balance")
-    .eq("workspace_id", workspace.id)
-    .order("created_at", { ascending: true });
+  // Comptes (sélecteur + soldes d'ouverture) et budgets sont indépendants :
+  // requêtés en parallèle. Les transactions attendent le filtre de compte.
+  const [{ data: accountRows }, { data: budgetRows }] = await Promise.all([
+    supabase
+      .from("accounts")
+      .select("id, name, opening_balance")
+      .eq("workspace_id", workspace.id)
+      .order("created_at", { ascending: true }),
+    supabase
+      .from("budgets")
+      .select("category, amount, month")
+      .eq("workspace_id", workspace.id),
+  ]);
   const accountsData = (accountRows ?? []) as DbAccount[];
   const accounts: AccountOption[] = accountsData.map((a) => ({
     value: a.id,
@@ -310,17 +318,6 @@ export async function getDashboardData(
           accountsData.find((a) => a.id === accountFilter)?.opening_balance ?? 0
         );
 
-  // Transactions (RLS = utilisateur connecté), filtrées par compte si besoin.
-  let query = supabase
-    .from("transactions")
-    .select(
-      "id, date, label, category, amount, direction, status, is_transfer, account_id"
-    )
-    .eq("workspace_id", workspace.id)
-    .order("date", { ascending: false });
-  if (accountFilter !== "all") query = query.eq("account_id", accountFilter);
-  const { data, error } = await query;
-
   interface TxRow {
     id: string;
     date: string;
@@ -332,7 +329,33 @@ export async function getDashboardData(
     is_transfer: boolean;
     account_id: string | null;
   }
-  const txns: DbTransaction[] = ((data ?? []) as unknown as TxRow[]).map((t) => ({
+
+  // Le dashboard agrège tout l'historique. PostgREST limitant habituellement
+  // une réponse à 1 000 lignes, on parcourt explicitement toutes les pages.
+  const transactionRows: TxRow[] = [];
+  let transactionError = false;
+  for (let offset = 0; ; offset += DASHBOARD_TRANSACTION_PAGE_SIZE) {
+    let query = supabase
+      .from("transactions")
+      .select(
+        "id, date, label, category, amount, direction, status, is_transfer, account_id"
+      )
+      .eq("workspace_id", workspace.id)
+      .order("date", { ascending: false })
+      .order("id", { ascending: false })
+      .range(offset, offset + DASHBOARD_TRANSACTION_PAGE_SIZE - 1);
+    if (accountFilter !== "all") query = query.eq("account_id", accountFilter);
+    const { data: page, error } = await query;
+    if (error) {
+      transactionError = true;
+      break;
+    }
+    const rows = (page ?? []) as unknown as TxRow[];
+    transactionRows.push(...rows);
+    if (rows.length < DASHBOARD_TRANSACTION_PAGE_SIZE) break;
+  }
+
+  const txns: DbTransaction[] = transactionRows.map((t) => ({
     id: t.id,
     date: t.date,
     merchant: t.label,
@@ -345,7 +368,7 @@ export async function getDashboardData(
     account_id: t.account_id,
   }));
 
-  if (error || txns.length === 0) {
+  if (transactionError || txns.length === 0) {
     return {
       kpis: emptyKpis(openingTotal, labels, kind),
       cashflow: [],
@@ -444,16 +467,15 @@ export async function getDashboardData(
       couleur: COULEURS[i % COULEURS.length],
     }));
 
-  // Budgets fixés (table budgets) + dépense réelle calculée.
-  const { data: budgetRows } = await supabase
-    .from("budgets")
-    .select("category, amount")
-    .eq("workspace_id", workspace.id);
-  const budgets: BudgetRow[] = (budgetRows ?? []).map((b) => ({
-    categorie: (b as { category: string }).category,
-    budget: Number((b as { amount: number }).amount),
-    depense: parCat.get((b as { category: string }).category) ?? 0,
-  }));
+  // Budgets du mois affiché + dépense réelle calculée sur ce même mois.
+  const budgets: BudgetRow[] = (budgetRows ?? [])
+    .filter((b) => String((b as { month: string }).month).slice(0, 7) === refKey)
+    .map((b) => ({
+      categorie: (b as { category: string }).category,
+      budget: Number((b as { amount: number }).amount),
+      depense: parCat.get((b as { category: string }).category) ?? 0,
+      month: refKey,
+    }));
 
   // 6 transactions les plus récentes (toutes, virements compris).
   const recent: RecentTransaction[] = txns.slice(0, 6).map((t) => ({

@@ -180,7 +180,11 @@ def get_accounts(user_id: str, **_) -> dict:
 def get_budgets(user_id: str, **_) -> dict:
     return {
         "budgets": [
-            {"categorie": b.get("category"), "budget": _eur(_decimal(b.get("amount")))}
+            {
+                "mois": b.get("month"),
+                "categorie": b.get("category"),
+                "budget": _eur(_decimal(b.get("amount"))),
+            }
             for b in fetch_budgets(user_id)
         ]
     }
@@ -285,7 +289,7 @@ TOOLS: list[dict] = [
     },
     {
         "name": "get_budgets",
-        "description": "Budgets définis par catégorie.",
+        "description": "Budgets définis par catégorie et par mois.",
         "parameters": {"type": "object", "properties": {}, "required": []},
         "handler": get_budgets,
     },
@@ -324,6 +328,14 @@ TOOL_DECLARATIONS: list[dict] = [
     for tool in TOOLS
 ]
 
+_BUSINESS_ONLY_TOOLS = {"get_overdue_receivables", "get_tax_vault"}
+
+
+def tool_declarations_for(workspace_type: str) -> list[dict]:
+    if workspace_type == "business":
+        return TOOL_DECLARATIONS
+    return [tool for tool in TOOL_DECLARATIONS if tool["name"] not in _BUSINESS_ONLY_TOOLS]
+
 _HANDLERS = {tool["name"]: tool["handler"] for tool in TOOLS}
 
 
@@ -335,25 +347,27 @@ def run_tool(name: str, user_id: str, arguments: dict | None = None) -> dict:
         return {"erreur": f"Outil inconnu : {name}"}
     try:
         return handler(user_id, **(arguments or {}))
-    except Exception as exc:  # noqa: BLE001 — robustesse volontaire côté agent
+    except Exception as exc:  # noqa: BLE001, robustesse volontaire côté agent
         print(f"[ai] outil {name} en echec : {exc}", flush=True)
         return {"erreur": f"L'outil {name} n'a pas pu s'exécuter."}
 
 
-def build_full_context(user_id: str) -> dict:
+def build_full_context(user_id: str, workspace_type: str = "business") -> dict:
     """Snapshot complet (compose les outils). Sert de repli si le function-calling
     échoue : on injecte tout le contexte en un seul appel."""
-    return {
+    context = {
         "kpis": get_kpis(user_id),
         **get_accounts(user_id),
         **get_spending_by_category(user_id),
         **get_budgets(user_id),
         "charges_recurrentes": get_recurring_charges(user_id),
         "prevision": get_forecast(user_id),
-        "encaissements": get_overdue_receivables(user_id),
-        "coffre_fort_fiscal": get_tax_vault(user_id),
         **get_recent_transactions(user_id),
     }
+    if workspace_type == "business":
+        context["encaissements"] = get_overdue_receivables(user_id)
+        context["coffre_fort_fiscal"] = get_tax_vault(user_id)
+    return context
 
 
 # --- Libellés d'étape (affichés pendant le streaming quand un outil tourne) ---

@@ -1,5 +1,5 @@
 -- =============================================================================
--- AskFinance — schéma de base (greenfield, multi-workspace)
+-- AskFinance, schéma de base (greenfield, multi-workspace)
 -- Identifiants en anglais, commentaires en français.
 -- Termes réglementaires français conservés comme noms propres : urssaf, siret.
 -- À exécuter dans l'éditeur SQL Supabase. Détruit et recrée tout.
@@ -18,6 +18,11 @@ drop table if exists conversations         cascade;
 drop table if exists einvoice_checklist    cascade;
 drop table if exists tax_settings          cascade;
 drop table if exists expected_receivables  cascade;
+drop table if exists receivable_reminders  cascade;
+drop table if exists workflow_items        cascade;
+drop table if exists audit_events          cascade;
+drop table if exists financial_alert_states cascade;
+drop table if exists transaction_category_rules cascade;
 drop table if exists budgets               cascade;
 drop table if exists transactions          cascade;
 drop table if exists imports               cascade;
@@ -29,6 +34,8 @@ drop table if exists profiles              cascade;
 drop trigger   if exists on_auth_user_created on auth.users;
 drop function if exists handle_new_user()           cascade;
 drop function if exists is_workspace_member(uuid)  cascade;
+drop function if exists can_edit_workspace(uuid)   cascade;
+drop function if exists can_admin_workspace(uuid)  cascade;
 drop function if exists set_updated_at()            cascade;
 
 -- -----------------------------------------------------------------------------
@@ -155,6 +162,9 @@ create table transactions (
   date         date not null,
   label        text not null,
   category     text,
+  category_source text not null default 'import'
+                 check (category_source in ('import', 'rule', 'ai', 'manual')),
+  category_confidence numeric check (category_confidence between 0 and 1),
   amount       numeric not null,
   direction    text not null check (direction in ('debit', 'credit')),
   status       text not null default 'cleared'
@@ -171,9 +181,37 @@ create table budgets (
   id           uuid primary key default gen_random_uuid(),
   workspace_id uuid not null references workspaces(id) on delete cascade,
   category     text not null,
+  month        date not null check (month = date_trunc('month', month)::date),
   amount       numeric not null,
   created_at   timestamptz not null default now(),
-  unique (workspace_id, category)
+  unique (workspace_id, category, month)
+);
+
+-- Règles apprises lors des corrections : un libellé normalisé retrouve
+-- automatiquement sa catégorie aux prochains imports.
+create table transaction_category_rules (
+  id           uuid primary key default gen_random_uuid(),
+  workspace_id uuid not null references workspaces(id) on delete cascade,
+  label_key    text not null,
+  category     text not null,
+  created_by   uuid references auth.users(id) on delete set null,
+  created_at   timestamptz not null default now(),
+  updated_at   timestamptz not null default now(),
+  unique (workspace_id, label_key)
+);
+
+-- État utilisateur des alertes calculées (les alertes elles-mêmes restent dérivées
+-- des données fraîches ; seule leur résolution ou leur report est persisté).
+create table financial_alert_states (
+  id            uuid primary key default gen_random_uuid(),
+  workspace_id  uuid not null references workspaces(id) on delete cascade,
+  alert_key     text not null,
+  status        text not null default 'open'
+                  check (status in ('open', 'snoozed', 'resolved')),
+  snoozed_until date,
+  updated_by    uuid references auth.users(id) on delete set null,
+  updated_at    timestamptz not null default now(),
+  unique (workspace_id, alert_key)
 );
 
 -- expected_receivables : encaissements clients attendus (espaces 'business').
@@ -181,10 +219,56 @@ create table expected_receivables (
   id           uuid primary key default gen_random_uuid(),
   workspace_id uuid not null references workspaces(id) on delete cascade,
   client       text not null,
+  invoice_number text,
+  contact_email text,
   amount       numeric not null,
+  paid_amount  numeric not null default 0,
   due_date     date,
   status       text not null default 'expected'
-                 check (status in ('expected', 'received')),
+                 check (status in ('expected', 'partial', 'received', 'cancelled')),
+  matched_transaction_id uuid references transactions(id) on delete set null,
+  matched_at   timestamptz,
+  received_at  date,
+  created_at   timestamptz not null default now()
+);
+
+create table receivable_reminders (
+  id            uuid primary key default gen_random_uuid(),
+  workspace_id  uuid not null references workspaces(id) on delete cascade,
+  receivable_id uuid not null references expected_receivables(id) on delete cascade,
+  channel       text not null default 'email' check (channel in ('email', 'phone', 'other')),
+  status        text not null default 'draft' check (status in ('draft', 'sent', 'cancelled')),
+  content       text,
+  sent_at       timestamptz,
+  created_by    uuid references auth.users(id) on delete set null,
+  created_at    timestamptz not null default now()
+);
+
+create table workflow_items (
+  id           uuid primary key default gen_random_uuid(),
+  workspace_id uuid not null references workspaces(id) on delete cascade,
+  kind         text not null,
+  title        text not null,
+  description  text,
+  entity_type  text,
+  entity_id    uuid,
+  status       text not null default 'pending' check (status in ('pending', 'approved', 'rejected', 'completed', 'cancelled')),
+  assigned_to  uuid references auth.users(id) on delete set null,
+  created_by   uuid references auth.users(id) on delete set null,
+  reviewed_by  uuid references auth.users(id) on delete set null,
+  reviewed_at  timestamptz,
+  created_at   timestamptz not null default now(),
+  updated_at   timestamptz not null default now()
+);
+
+create table audit_events (
+  id           uuid primary key default gen_random_uuid(),
+  workspace_id uuid not null references workspaces(id) on delete cascade,
+  actor_id     uuid references auth.users(id) on delete set null,
+  action       text not null,
+  entity_type  text not null,
+  entity_id    text,
+  metadata     jsonb not null default '{}'::jsonb,
   created_at   timestamptz not null default now()
 );
 
@@ -241,6 +325,9 @@ create trigger trg_workspaces_updated     before update on workspaces     for ea
 create trigger trg_companies_updated      before update on companies      for each row execute function set_updated_at();
 create trigger trg_tax_settings_updated   before update on tax_settings   for each row execute function set_updated_at();
 create trigger trg_conversations_updated  before update on conversations  for each row execute function set_updated_at();
+create trigger trg_category_rules_updated before update on transaction_category_rules for each row execute function set_updated_at();
+create trigger trg_alert_states_updated before update on financial_alert_states for each row execute function set_updated_at();
+create trigger trg_workflow_items_updated before update on workflow_items for each row execute function set_updated_at();
 
 -- =============================================================================
 -- INDEX (clés étrangères les plus sollicitées en lecture)
@@ -250,14 +337,19 @@ create index idx_members_workspace        on workspace_members (workspace_id);
 create index idx_accounts_workspace       on accounts (workspace_id);
 create index idx_transactions_workspace   on transactions (workspace_id, date desc);
 create index idx_transactions_account     on transactions (account_id);
-create index idx_budgets_workspace        on budgets (workspace_id);
+create index idx_budgets_workspace        on budgets (workspace_id, month);
+create index idx_category_rules_workspace on transaction_category_rules (workspace_id);
+create index idx_alert_states_workspace    on financial_alert_states (workspace_id);
 create index idx_receivables_workspace    on expected_receivables (workspace_id);
+create index idx_reminders_receivable     on receivable_reminders (receivable_id, created_at desc);
+create index idx_workflows_workspace      on workflow_items (workspace_id, status, created_at desc);
+create index idx_audit_workspace          on audit_events (workspace_id, created_at desc);
 create index idx_imports_workspace        on imports (workspace_id);
 create index idx_conversations_workspace  on conversations (workspace_id);
 create index idx_messages_conversation    on messages (conversation_id);
 
 -- =============================================================================
--- SÉCURITÉ — RLS (chemin Next.js, clé anon)
+-- SÉCURITÉ : RLS (chemin Next.js, clé anon)
 -- ⚠️ Le backend Python utilise la SERVICE_ROLE_KEY : il CONTOURNE la RLS.
 --    La garde d'appartenance y est donc faite à la main (voir code Python).
 -- =============================================================================
@@ -278,6 +370,40 @@ as $$
   );
 $$;
 
+-- Les rôles ne sont pas décoratifs : viewer lit, member contribue,
+-- admin/owner administrent. Ces helpers centralisent la matrice RLS.
+create function can_edit_workspace(ws uuid)
+returns boolean
+language sql
+security definer
+stable
+set search_path = public
+as $$
+  select exists (
+    select 1 from workspace_members m
+    where m.workspace_id = ws
+      and m.user_id = auth.uid()
+      and m.status = 'active'
+      and m.role in ('owner', 'admin', 'member')
+  );
+$$;
+
+create function can_admin_workspace(ws uuid)
+returns boolean
+language sql
+security definer
+stable
+set search_path = public
+as $$
+  select exists (
+    select 1 from workspace_members m
+    where m.workspace_id = ws
+      and m.user_id = auth.uid()
+      and m.status = 'active'
+      and m.role in ('owner', 'admin')
+  );
+$$;
+
 alter table profiles             enable row level security;
 alter table workspaces           enable row level security;
 alter table workspace_members    enable row level security;
@@ -286,6 +412,11 @@ alter table accounts             enable row level security;
 alter table imports              enable row level security;
 alter table transactions         enable row level security;
 alter table budgets              enable row level security;
+alter table transaction_category_rules enable row level security;
+alter table financial_alert_states enable row level security;
+alter table receivable_reminders enable row level security;
+alter table workflow_items enable row level security;
+alter table audit_events enable row level security;
 alter table expected_receivables enable row level security;
 alter table tax_settings         enable row level security;
 alter table einvoice_checklist   enable row level security;
@@ -302,22 +433,41 @@ create policy workspaces_member_read on workspaces
 
 -- workspace_members : on voit les membres des espaces dont on fait partie,
 -- ET sa propre adhésion (même 'pending', pour l'écran « en attente de validation »).
--- (Les écritures — rejoindre / valider — passent par un chemin serveur de confiance.)
+-- (Les écritures pour rejoindre ou valider passent par un chemin serveur de confiance.)
 create policy members_read on workspace_members
   for select using (
     user_id = auth.uid()
     or is_workspace_member(workspace_id)
   );
 
--- Tables métier : lecture/écriture réservées aux membres de l'espace.
-create policy companies_members  on companies            for all using (is_workspace_member(workspace_id)) with check (is_workspace_member(workspace_id));
-create policy accounts_members   on accounts             for all using (is_workspace_member(workspace_id)) with check (is_workspace_member(workspace_id));
-create policy imports_members    on imports              for all using (is_workspace_member(workspace_id)) with check (is_workspace_member(workspace_id));
-create policy tx_members         on transactions         for all using (is_workspace_member(workspace_id)) with check (is_workspace_member(workspace_id));
-create policy budgets_members    on budgets              for all using (is_workspace_member(workspace_id)) with check (is_workspace_member(workspace_id));
-create policy receiv_members     on expected_receivables for all using (is_workspace_member(workspace_id)) with check (is_workspace_member(workspace_id));
-create policy tax_members        on tax_settings         for all using (is_workspace_member(workspace_id)) with check (is_workspace_member(workspace_id));
-create policy einv_members       on einvoice_checklist   for all using (is_workspace_member(workspace_id)) with check (is_workspace_member(workspace_id));
+-- Tables métier : tous les membres actifs lisent ; un viewer ne modifie rien.
+create policy companies_read   on companies            for select using (is_workspace_member(workspace_id));
+create policy companies_write  on companies            for all using (can_edit_workspace(workspace_id)) with check (can_edit_workspace(workspace_id));
+create policy accounts_read    on accounts             for select using (is_workspace_member(workspace_id));
+create policy accounts_insert  on accounts             for insert with check (can_edit_workspace(workspace_id));
+create policy accounts_update  on accounts             for update using (can_edit_workspace(workspace_id)) with check (can_edit_workspace(workspace_id));
+create policy accounts_delete  on accounts             for delete using (can_admin_workspace(workspace_id));
+create policy imports_read     on imports              for select using (is_workspace_member(workspace_id));
+create policy imports_write    on imports              for all using (can_edit_workspace(workspace_id)) with check (can_edit_workspace(workspace_id));
+create policy tx_read          on transactions         for select using (is_workspace_member(workspace_id));
+create policy tx_write         on transactions         for all using (can_edit_workspace(workspace_id)) with check (can_edit_workspace(workspace_id));
+create policy budgets_read     on budgets              for select using (is_workspace_member(workspace_id));
+create policy budgets_write    on budgets              for all using (can_edit_workspace(workspace_id)) with check (can_edit_workspace(workspace_id));
+create policy category_rules_read on transaction_category_rules for select using (is_workspace_member(workspace_id));
+create policy category_rules_write on transaction_category_rules for all using (can_edit_workspace(workspace_id)) with check (can_edit_workspace(workspace_id));
+create policy alert_states_read on financial_alert_states for select using (is_workspace_member(workspace_id));
+create policy alert_states_write on financial_alert_states for all using (can_edit_workspace(workspace_id)) with check (can_edit_workspace(workspace_id));
+create policy reminders_read on receivable_reminders for select using (is_workspace_member(workspace_id));
+create policy workflows_read on workflow_items for select using (is_workspace_member(workspace_id));
+create policy audit_read on audit_events for select using (is_workspace_member(workspace_id));
+-- Écritures reminders/workflows/audit : uniquement via les actions serveur
+-- (service role + validation explicite du rôle et journalisation).
+create policy receiv_read      on expected_receivables for select using (is_workspace_member(workspace_id));
+create policy receiv_write     on expected_receivables for all using (can_edit_workspace(workspace_id)) with check (can_edit_workspace(workspace_id));
+create policy tax_read         on tax_settings         for select using (is_workspace_member(workspace_id));
+create policy tax_write        on tax_settings         for all using (can_edit_workspace(workspace_id)) with check (can_edit_workspace(workspace_id));
+create policy einv_read        on einvoice_checklist   for select using (is_workspace_member(workspace_id));
+create policy einv_write       on einvoice_checklist   for all using (can_edit_workspace(workspace_id)) with check (can_edit_workspace(workspace_id));
 
 -- conversations : PRIVÉES à leur auteur (même au sein d'un espace partagé).
 -- Il faut être membre actif de l'espace ET propriétaire de la conversation.
@@ -343,7 +493,7 @@ create policy messages_owner on messages
   ));
 
 -- =============================================================================
--- DÉPENSES PARTAGÉES (espaces de type 'group' — registre type Tricount)
+-- DÉPENSES PARTAGÉES (espaces de type 'group', registre type Tricount)
 -- =============================================================================
 
 create table shared_expenses (
@@ -386,11 +536,15 @@ alter table shared_expenses       enable row level security;
 alter table shared_expense_shares enable row level security;
 alter table settlements           enable row level security;
 
-create policy shared_exp_members on shared_expenses
-  for all using (is_workspace_member(workspace_id)) with check (is_workspace_member(workspace_id));
+create policy shared_exp_read on shared_expenses
+  for select using (is_workspace_member(workspace_id));
+create policy shared_exp_write on shared_expenses
+  for all using (can_edit_workspace(workspace_id)) with check (can_edit_workspace(workspace_id));
 
-create policy settlements_members on settlements
-  for all using (is_workspace_member(workspace_id)) with check (is_workspace_member(workspace_id));
+create policy settlements_read on settlements
+  for select using (is_workspace_member(workspace_id));
+create policy settlements_write on settlements
+  for all using (can_edit_workspace(workspace_id)) with check (can_edit_workspace(workspace_id));
 
 create policy shares_members on shared_expense_shares
   for all
@@ -399,4 +553,4 @@ create policy shares_members on shared_expense_shares
                    and is_workspace_member(e.workspace_id)))
   with check (exists (select 1 from shared_expenses e
                       where e.id = shared_expense_shares.expense_id
-                        and is_workspace_member(e.workspace_id)));
+                        and can_edit_workspace(e.workspace_id)));

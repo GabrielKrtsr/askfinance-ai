@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, Plus, X } from "lucide-react";
+import { Check, Copy, Loader2, Pencil, Plus, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { createClient } from "@/lib/supabase/client";
@@ -29,24 +29,44 @@ interface Budget {
   categorie: string;
   depense: number;
   budget: number;
+  month: string;
 }
 
 interface BudgetManagerProps {
   budgets: Budget[];
   categories: string[];
   workspaceId: string;
+  month: string;
+  monthLabel?: string;
+  canEdit?: boolean;
+}
+
+function monthDate(month: string) {
+  return `${month}-01`;
+}
+
+function previousMonthDate(month: string) {
+  const [year, monthNumber] = month.split("-").map(Number);
+  const date = new Date(Date.UTC(year, monthNumber - 2, 1));
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}-01`;
 }
 
 export function BudgetManager({
   budgets,
   categories,
   workspaceId,
+  month,
+  monthLabel,
+  canEdit = true,
 }: BudgetManagerProps) {
   const router = useRouter();
   const [adding, setAdding] = useState(false);
   const [category, setCategory] = useState("");
   const [amount, setAmount] = useState("");
   const [saving, setSaving] = useState(false);
+  const [copying, setCopying] = useState(false);
+  const [editingCategory, setEditingCategory] = useState<string | null>(null);
+  const [editingAmount, setEditingAmount] = useState("");
 
   // On ne propose que les catégories pas encore budgétées.
   const budgeted = new Set(budgets.map((b) => b.categorie));
@@ -54,6 +74,10 @@ export function BudgetManager({
 
   async function handleSave() {
     const value = Number(amount.replace(",", "."));
+    if (!month) {
+      toast.error("Choisissez d'abord un mois.");
+      return;
+    }
     if (!category || !Number.isFinite(value) || value <= 0) {
       toast.error("Choisissez une catégorie et un montant valide.");
       return;
@@ -64,8 +88,13 @@ export function BudgetManager({
     const { error } = await supabase
       .from("budgets")
       .upsert(
-        { workspace_id: workspaceId, category, amount: value },
-        { onConflict: "workspace_id,category" }
+        {
+          workspace_id: workspaceId,
+          category,
+          month: monthDate(month),
+          amount: value,
+        },
+        { onConflict: "workspace_id,category,month" }
       );
     setSaving(false);
 
@@ -82,13 +111,90 @@ export function BudgetManager({
     router.refresh();
   }
 
+  async function handleUpdate() {
+    if (!editingCategory || !month) return;
+    const value = Number(editingAmount.replace(",", "."));
+    if (!Number.isFinite(value) || value <= 0) {
+      toast.error("Saisissez un montant valide.");
+      return;
+    }
+
+    setSaving(true);
+    const supabase = createClient();
+    const { error } = await supabase
+      .from("budgets")
+      .update({ amount: value })
+      .eq("workspace_id", workspaceId)
+      .eq("category", editingCategory)
+      .eq("month", monthDate(month));
+    setSaving(false);
+
+    if (error) {
+      toast.error("Modification impossible", { description: error.message });
+      return;
+    }
+    toast.success("Budget modifié");
+    setEditingCategory(null);
+    setEditingAmount("");
+    router.refresh();
+  }
+
+  async function handleCopyPreviousMonth() {
+    if (!month) return toast.error("Choisissez d'abord un mois.");
+    setCopying(true);
+    const supabase = createClient();
+    const previousMonth = previousMonthDate(month);
+    const { data, error } = await supabase
+      .from("budgets")
+      .select("category, amount")
+      .eq("workspace_id", workspaceId)
+      .eq("month", previousMonth);
+
+    if (error) {
+      setCopying(false);
+      toast.error("Impossible de charger le mois précédent", {
+        description: error.message,
+      });
+      return;
+    }
+
+    const existingCategories = new Set(budgets.map((budget) => budget.categorie));
+    const rows = (data ?? [])
+      .filter((budget) => !existingCategories.has(budget.category))
+      .map((budget) => ({
+        workspace_id: workspaceId,
+        category: budget.category,
+        month: monthDate(month),
+        amount: budget.amount,
+      }));
+
+    if (rows.length === 0) {
+      setCopying(false);
+      toast.info("Aucun budget à reprendre du mois précédent.");
+      return;
+    }
+
+    const { error: copyError } = await supabase
+      .from("budgets")
+      .upsert(rows, { onConflict: "workspace_id,category,month" });
+    setCopying(false);
+
+    if (copyError) {
+      toast.error("Copie impossible", { description: copyError.message });
+      return;
+    }
+    toast.success(`${rows.length} budget(s) repris du mois précédent`);
+    router.refresh();
+  }
+
   async function handleDelete(categorie: string) {
     const supabase = createClient();
     const { error } = await supabase
       .from("budgets")
       .delete()
       .eq("workspace_id", workspaceId)
-      .eq("category", categorie);
+      .eq("category", categorie)
+      .eq("month", monthDate(month));
     if (error) {
       toast.error("Suppression impossible", { description: error.message });
       return;
@@ -103,14 +209,31 @@ export function BudgetManager({
         <div>
           <CardTitle>Suivi budgétaire</CardTitle>
           <CardDescription>
-            Vos dépenses par rapport à vos budgets
+            Vos dépenses par rapport aux budgets de {monthLabel ?? month}
           </CardDescription>
         </div>
-        {!adding && (
-          <Button variant="outline" size="sm" onClick={() => setAdding(true)}>
-            <Plus className="h-4 w-4" />
-            Ajouter
-          </Button>
+        {canEdit && (
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleCopyPreviousMonth}
+              disabled={copying || !month}
+            >
+              {copying ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Copy className="h-4 w-4" />
+              )}
+              Reprendre le mois précédent
+            </Button>
+            {!adding && (
+              <Button variant="outline" size="sm" onClick={() => setAdding(true)}>
+                <Plus className="h-4 w-4" />
+                Ajouter
+              </Button>
+            )}
+          </div>
         )}
       </CardHeader>
       <CardContent className="space-y-5">
@@ -177,26 +300,75 @@ export function BudgetManager({
             const pct =
               b.budget > 0 ? Math.round((b.depense / b.budget) * 100) : 0;
             const over = b.depense > b.budget;
+            const editing = editingCategory === b.categorie;
             return (
               <div key={b.categorie} className="group">
                 <div className="mb-1.5 flex items-center justify-between text-sm">
                   <span className="font-medium">{b.categorie}</span>
                   <div className="flex items-center gap-2">
-                    <span
-                      className={cn(
-                        "tabular-nums",
-                        over ? "text-red-500" : "text-muted-foreground"
-                      )}
-                    >
-                      {formatEUR(b.depense)} / {formatEUR(b.budget)}
-                    </span>
-                    <button
-                      onClick={() => handleDelete(b.categorie)}
-                      className="text-muted-foreground opacity-0 transition-opacity hover:text-red-500 group-hover:opacity-100"
-                      aria-label={`Supprimer le budget ${b.categorie}`}
-                    >
-                      <X className="h-3.5 w-3.5" />
-                    </button>
+                    {editing ? (
+                      <>
+                        <Input
+                          className="h-8 w-28"
+                          type="number"
+                          inputMode="decimal"
+                          value={editingAmount}
+                          onChange={(event) => setEditingAmount(event.target.value)}
+                          aria-label={`Nouveau budget ${b.categorie}`}
+                        />
+                        <button
+                          onClick={handleUpdate}
+                          disabled={saving}
+                          className="text-emerald-600 disabled:opacity-50"
+                          aria-label={`Enregistrer le budget ${b.categorie}`}
+                        >
+                          {saving ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <Check className="h-3.5 w-3.5" />
+                          )}
+                        </button>
+                        <button
+                          onClick={() => setEditingCategory(null)}
+                          className="text-muted-foreground"
+                          aria-label="Annuler la modification"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <span
+                          className={cn(
+                            "tabular-nums",
+                            over ? "text-red-500" : "text-muted-foreground"
+                          )}
+                        >
+                          {formatEUR(b.depense)} / {formatEUR(b.budget)}
+                        </span>
+                        {canEdit && (
+                          <>
+                            <button
+                              onClick={() => {
+                                setEditingCategory(b.categorie);
+                                setEditingAmount(String(b.budget));
+                              }}
+                              className="text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100"
+                              aria-label={`Modifier le budget ${b.categorie}`}
+                            >
+                              <Pencil className="h-3.5 w-3.5" />
+                            </button>
+                            <button
+                              onClick={() => handleDelete(b.categorie)}
+                              className="text-muted-foreground opacity-0 transition-opacity hover:text-red-500 group-hover:opacity-100"
+                              aria-label={`Supprimer le budget ${b.categorie}`}
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </button>
+                          </>
+                        )}
+                      </>
+                    )}
                   </div>
                 </div>
                 <Progress

@@ -15,6 +15,7 @@ import {
   getRecurringCharges,
   type RecurringResult,
 } from "@/lib/services/recurring";
+import { usePilotage } from "@/components/dashboard/pilotage-provider";
 
 const TYPE_LABEL: Record<string, string> = {
   abonnement: "Abonnement",
@@ -23,16 +24,25 @@ const TYPE_LABEL: Record<string, string> = {
 };
 
 export function RecurringCharges({ workspaceId }: { workspaceId: string }) {
-  const [data, setData] = useState<RecurringResult | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
+  // Dans un PilotageProvider : données partagées (un seul appel API pour la
+  // page). Sinon : fetch autonome, comme avant.
+  const shared = usePilotage();
+  const isShared = shared !== null;
+  const [ownData, setOwnData] = useState<RecurringResult | null>(null);
+  const [ownLoading, setOwnLoading] = useState(true);
+  const [ownError, setOwnError] = useState(false);
 
   useEffect(() => {
+    if (isShared) return;
     getRecurringCharges(workspaceId)
-      .then(setData)
-      .catch(() => setError(true))
-      .finally(() => setLoading(false));
-  }, [workspaceId]);
+      .then(setOwnData)
+      .catch(() => setOwnError(true))
+      .finally(() => setOwnLoading(false));
+  }, [isShared, workspaceId]);
+
+  const data = shared ? (shared.data?.recurring ?? null) : ownData;
+  const loading = shared ? shared.loading : ownLoading;
+  const error = shared ? shared.error : ownError;
 
   return (
     <Card>

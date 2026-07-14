@@ -50,7 +50,7 @@ const uk: Messages = {
   dashboard: {
     greeting: "Вітаємо 👋",
     greetingName: "Вітаємо, {name} 👋",
-    subtitle: "Ось огляд ваших фінансів — {month}.",
+    subtitle: "Ось огляд ваших фінансів за {month}.",
     subtitleNoMonth: "Ось огляд ваших фінансів.",
     kpiBalance: "Залишок коштів",
     kpiBalancePerso: "Залишок",

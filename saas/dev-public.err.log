@@ -1,0 +1,73 @@
+<w> [webpack.cache.PackFileCacheStrategy] Restoring pack from C:\Users\gabri\Desktop\askfinance-ai\saas\.next\cache\webpack\client-development.pack.gz failed: TypeError: Cannot read properties of undefined (reading 'hasStartTime')
+<w> [webpack.cache.PackFileCacheStrategy] Serializing big strings (102kiB) impacts deserialization performance (consider using Buffer instead and decode when needed)
+<w> [webpack.cache.PackFileCacheStrategy] Serializing big strings (250kiB) impacts deserialization performance (consider using Buffer instead and decode when needed)
+ [TypeError: fetch failed] {
+  cause:  [Error: unable to verify the first certificate; if the root CA is installed locally, try running Node.js with --use-system-ca] {
+  code: 'UNABLE_TO_VERIFY_LEAF_SIGNATURE'
+}
+}
+ [TypeError: fetch failed] {
+  cause:  [Error: unable to verify the first certificate; if the root CA is installed locally, try running Node.js with --use-system-ca] {
+  code: 'UNABLE_TO_VERIFY_LEAF_SIGNATURE'
+}
+}
+ [TypeError: fetch failed] {
+  cause:  [Error: unable to verify the first certificate; if the root CA is installed locally, try running Node.js with --use-system-ca] {
+  code: 'UNABLE_TO_VERIFY_LEAF_SIGNATURE'
+}
+}
+ [TypeError: fetch failed] {
+  cause:  [Error: unable to verify the first certificate; if the root CA is installed locally, try running Node.js with --use-system-ca] {
+  code: 'UNABLE_TO_VERIFY_LEAF_SIGNATURE'
+}
+}
+ [TypeError: fetch failed] {
+  cause:  [Error: unable to verify the first certificate; if the root CA is installed locally, try running Node.js with --use-system-ca] {
+  code: 'UNABLE_TO_VERIFY_LEAF_SIGNATURE'
+}
+}
+ [TypeError: fetch failed] {
+  cause:  [Error: unable to verify the first certificate; if the root CA is installed locally, try running Node.js with --use-system-ca] {
+  code: 'UNABLE_TO_VERIFY_LEAF_SIGNATURE'
+}
+}
+ [TypeError: fetch failed] {
+  cause:  [Error: unable to verify the first certificate; if the root CA is installed locally, try running Node.js with --use-system-ca] {
+  code: 'UNABLE_TO_VERIFY_LEAF_SIGNATURE'
+}
+}
+ [TypeError: fetch failed] {
+  cause:  [Error: unable to verify the first certificate; if the root CA is installed locally, try running Node.js with --use-system-ca] {
+  code: 'UNABLE_TO_VERIFY_LEAF_SIGNATURE'
+}
+}
+ [TypeError: fetch failed] {
+  cause:  [Error: unable to verify the first certificate; if the root CA is installed locally, try running Node.js with --use-system-ca] {
+  code: 'UNABLE_TO_VERIFY_LEAF_SIGNATURE'
+}
+}
+ [TypeError: fetch failed] {
+  cause:  [Error: unable to verify the first certificate; if the root CA is installed locally, try running Node.js with --use-system-ca] {
+  code: 'UNABLE_TO_VERIFY_LEAF_SIGNATURE'
+}
+}
+ [TypeError: fetch failed] {
+  cause:  [Error: unable to verify the first certificate; if the root CA is installed locally, try running Node.js with --use-system-ca] {
+  code: 'UNABLE_TO_VERIFY_LEAF_SIGNATURE'
+}
+}
+ [TypeError: fetch failed] {
+  cause:  [Error: unable to verify the first certificate; if the root CA is installed locally, try running Node.js with --use-system-ca] {
+  code: 'UNABLE_TO_VERIFY_LEAF_SIGNATURE'
+}
+}
+ [TypeError: fetch failed] {
+  cause:  [Error: unable to verify the first certificate; if the root CA is installed locally, try running Node.js with --use-system-ca] {
+  code: 'UNABLE_TO_VERIFY_LEAF_SIGNATURE'
+}
+}
+ [TypeError: fetch failed] {
+  cause:  [Error: unable to verify the first certificate; if the root CA is installed locally, try running Node.js with --use-system-ca] {
+  code: 'UNABLE_TO_VERIFY_LEAF_SIGNATURE'
+}
+}

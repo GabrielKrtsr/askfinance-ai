@@ -15,17 +15,22 @@ def _client() -> Client:
 
 
 def get_user_id(access_token: str) -> str | None:
-    """Valide le JWT auprès de Supabase et renvoie l'id (sub) de l'utilisateur,
-    ou None si le token est invalide/expiré."""
+    """Vérifie le JWT et renvoie l'id (sub) de l'utilisateur, ou None si invalide.
+
+    `get_claims` vérifie la signature **localement** (JWKS mis en cache par le
+    client) quand le projet utilise des clés asymétriques → zéro aller-retour
+    réseau par requête. Pour un projet legacy signé en HS256, la lib retombe
+    d'elle-même sur l'appel réseau `get_user` : le comportement reste correct."""
     try:
-        response = _client().auth.get_user(access_token)
+        response = _client().auth.get_claims(access_token)
     except Exception as exc:
         # On rend l'erreur visible dans le terminal pour le débogage
-        print(f"[auth] échec de get_user : {exc}", flush=True)
+        print(f"[auth] token rejeté : {exc}", flush=True)
         return None
-    if response is None or response.user is None:
+    if not response:
         return None
-    return response.user.id
+    sub = response["claims"].get("sub")
+    return str(sub) if sub else None
 
 
 def get_account_workspace(account_id: str) -> str | None:
@@ -40,6 +45,12 @@ def get_account_workspace(account_id: str) -> str | None:
     )
     row = (response.data or [None])[0]
     return row["workspace_id"] if row else None
+
+
+def get_workspace_type(workspace_id: str) -> str:
+    response = _client().table("workspaces").select("type").eq("id", workspace_id).limit(1).execute()
+    row = (response.data or [{}])[0]
+    return str(row.get("type") or "business")
 
 
 def user_is_member(workspace_id: str, user_id: str) -> bool:
@@ -59,18 +70,58 @@ def user_is_member(workspace_id: str, user_id: str) -> bool:
     return bool(response.data)
 
 
+def user_can_edit_workspace(workspace_id: str, user_id: str) -> bool:
+    """Vrai pour owner/admin/member actifs ; un viewer reste en lecture seule."""
+    response = (
+        _client()
+        .table("workspace_members")
+        .select("role")
+        .eq("workspace_id", workspace_id)
+        .eq("user_id", user_id)
+        .eq("status", "active")
+        .in_("role", ["owner", "admin", "member"])
+        .limit(1)
+        .execute()
+    )
+    return bool(response.data)
+
+
 # Les colonnes en base sont `label`/`direction` (schéma anglais) ; les services
 # d'analyse et les outils IA attendent `merchant`/`type` → on remappe à la lecture.
 
+TRANSACTION_PAGE_SIZE = 1_000
+
+
+def _fetch_all_transaction_rows(workspace_id: str, columns: str) -> list[dict]:
+    """Parcourt explicitement toutes les pages PostgREST.
+
+    La limite Supabase est généralement de 1 000 lignes. L'ordre date + id rend
+    les pages déterministes, y compris quand plusieurs opérations ont la même date.
+    """
+    rows: list[dict] = []
+    offset = 0
+    while True:
+        response = (
+            _client()
+            .table("transactions")
+            .select(columns)
+            .eq("workspace_id", workspace_id)
+            .order("date", desc=False)
+            .order("id", desc=False)
+            .range(offset, offset + TRANSACTION_PAGE_SIZE - 1)
+            .execute()
+        )
+        page = response.data or []
+        rows.extend(page)
+        if len(page) < TRANSACTION_PAGE_SIZE:
+            return rows
+        offset += TRANSACTION_PAGE_SIZE
+
 def fetch_transactions(workspace_id: str) -> list[dict]:
     """Toutes les transactions d'un espace (pour l'analyse)."""
-    response = (
-        _client()
-        .table("transactions")
-        .select("date, label, category, amount, direction, is_transfer")
-        .eq("workspace_id", workspace_id)
-        .order("date", desc=False)
-        .execute()
+    rows = _fetch_all_transaction_rows(
+        workspace_id,
+        "date, label, category, amount, direction, is_transfer",
     )
     return [
         {
@@ -81,7 +132,7 @@ def fetch_transactions(workspace_id: str) -> list[dict]:
             "type": r.get("direction"),
             "is_transfer": r.get("is_transfer"),
         }
-        for r in (response.data or [])
+        for r in rows
     ]
 
 
@@ -112,12 +163,13 @@ def fetch_transactions_for_ai(workspace_id: str, limit: int = 120) -> list[dict]
 
 
 def fetch_budgets(workspace_id: str) -> list[dict]:
-    """Budgets d'un espace."""
+    """Budgets mensuels d'un espace."""
     response = (
         _client()
         .table("budgets")
-        .select("category, amount")
+        .select("category, amount, month")
         .eq("workspace_id", workspace_id)
+        .order("month", desc=True)
         .execute()
     )
     return response.data or []
@@ -128,7 +180,7 @@ def fetch_expected_receivables(workspace_id: str) -> list[dict]:
     response = (
         _client()
         .table("expected_receivables")
-        .select("id, client, amount, due_date")
+        .select("id, client, invoice_number, contact_email, amount, paid_amount, due_date, status, received_at, matched_transaction_id")
         .eq("workspace_id", workspace_id)
         .order("due_date", desc=False)
         .execute()
@@ -164,12 +216,9 @@ def fetch_tax_settings(workspace_id: str) -> dict | None:
 
 def fetch_transactions_full(workspace_id: str) -> list[dict]:
     """Transactions avec id et compte (pour l'appariement des virements)."""
-    response = (
-        _client()
-        .table("transactions")
-        .select("id, date, label, amount, direction, account_id, is_transfer")
-        .eq("workspace_id", workspace_id)
-        .execute()
+    rows = _fetch_all_transaction_rows(
+        workspace_id,
+        "id, date, label, amount, direction, account_id, is_transfer",
     )
     return [
         {
@@ -181,7 +230,7 @@ def fetch_transactions_full(workspace_id: str) -> list[dict]:
             "account_id": r.get("account_id"),
             "is_transfer": r.get("is_transfer"),
         }
-        for r in (response.data or [])
+        for r in rows
     ]
 
 
@@ -240,6 +289,22 @@ def delete_import(workspace_id: str, import_id: str) -> None:
     )
 
 
+IMPORT_BUCKET = "transaction-imports"
+
+
+def download_import_file(storage_path: str) -> bytes:
+    """Télécharge un CSV privé depuis Supabase Storage avec la service role."""
+    return _client().storage.from_(IMPORT_BUCKET).download(storage_path)
+
+
+def delete_import_file(storage_path: str) -> None:
+    """Supprime sans bruit le fichier temporaire après traitement."""
+    try:
+        _client().storage.from_(IMPORT_BUCKET).remove([storage_path])
+    except Exception as exc:
+        print(f"[import] suppression du CSV impossible : {exc}", flush=True)
+
+
 def list_accounts(workspace_id: str) -> list[dict]:
     """Comptes d'un espace (id, nom, solde d'ouverture)."""
     response = (
@@ -252,22 +317,42 @@ def list_accounts(workspace_id: str) -> list[dict]:
     return response.data or []
 
 
+def fetch_category_rules(workspace_id: str) -> dict[str, str]:
+    """Règles exactes libellé normalisé -> catégorie apprises dans l'espace."""
+    response = (
+        _client()
+        .table("transaction_category_rules")
+        .select("label_key, category")
+        .eq("workspace_id", workspace_id)
+        .execute()
+    )
+    return {
+        str(row.get("label_key") or ""): str(row.get("category") or "")
+        for row in (response.data or [])
+        if row.get("label_key") and row.get("category")
+    }
+
+
 def insert_transactions(records: list[dict]) -> int:
     """Insère les transactions en ignorant les doublons
     (contrainte unique user_id + fingerprint). Renvoie le nombre réellement inséré."""
     if not records:
         return 0
-    response = (
-        _client()
-        .table("transactions")
-        .upsert(
-            records,
-            on_conflict="workspace_id,account_id,fingerprint",
-            ignore_duplicates=True,
+    inserted = 0
+    # Évite une requête HTTP Supabase gigantesque pour les relevés volumineux.
+    for offset in range(0, len(records), 1_000):
+        response = (
+            _client()
+            .table("transactions")
+            .upsert(
+                records[offset:offset + 1_000],
+                on_conflict="workspace_id,account_id,fingerprint",
+                ignore_duplicates=True,
+            )
+            .execute()
         )
-        .execute()
-    )
-    return len(response.data or [])
+        inserted += len(response.data or [])
+    return inserted
 
 
 # --- Conversations du copilote IA ---

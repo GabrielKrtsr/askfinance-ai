@@ -1,10 +1,13 @@
 import { createClient } from "@/lib/supabase/client";
 
-export type ReceivableStatus = "received" | "late" | "upcoming";
+export type ReceivableStatus = "received" | "late" | "partial" | "upcoming";
 
 export interface Receivable {
   id: string;
   client: string;
+  invoice_number: string | null;
+  contact_email: string | null;
+  paid_amount: number;
   montant_attendu: number;
   date_prevue: string | null; // ISO
   statut: ReceivableStatus;

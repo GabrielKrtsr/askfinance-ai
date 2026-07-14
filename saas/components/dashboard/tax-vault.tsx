@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   PiggyBank,
@@ -52,7 +52,7 @@ export function TaxVault({ workspaceId }: { workspaceId: string }) {
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  async function load() {
+  const load = useCallback(async () => {
     try {
       const [v, s] = await Promise.all([
         getTaxVault(workspaceId),
@@ -65,11 +65,11 @@ export function TaxVault({ workspaceId }: { workspaceId: string }) {
     } finally {
       setLoading(false);
     }
-  }
+  }, [workspaceId]);
 
   useEffect(() => {
     load();
-  }, []);
+  }, [load]);
 
   async function handleSave() {
     setSaving(true);

@@ -7,7 +7,7 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { approveMember, removeMember } from "@/lib/actions/workspaces";
+import { approveMember, changeMemberRole, removeMember } from "@/lib/actions/workspaces";
 import type { MembersView } from "@/lib/data/workspace";
 
 const ROLE_LABEL: Record<string, string> = {
@@ -136,7 +136,7 @@ export function MembersPanel({
                 </div>
 
                 {canManage && pending && (
-                  <Button
+                  <div className="flex gap-1"><Button
                     size="sm"
                     disabled={busy !== null}
                     onClick={() =>
@@ -151,10 +151,21 @@ export function MembersPanel({
                       <ShieldCheck className="h-4 w-4" />
                     )}
                     Valider
-                  </Button>
+                  </Button><Button variant="ghost" size="sm" disabled={busy !== null} onClick={() => run(`rm-${m.userId}`, () => removeMember({ workspaceId, userId: m.userId }))}>Refuser</Button></div>
                 )}
 
-                {canManage && !isSelf && rank(m.role) < rank(view.callerRole) && (
+                {canManage && !pending && !isSelf && rank(m.role) < rank(view.callerRole) && (
+                  <>
+                  <select
+                    value={m.role}
+                    disabled={busy !== null}
+                    onChange={(event) => run(`role-${m.userId}`, () => changeMemberRole({ workspaceId, userId: m.userId, role: event.target.value as "admin" | "member" | "viewer" }))}
+                    className="h-8 rounded-md border bg-background px-2 text-xs"
+                  >
+                    {view.callerRole === "owner" && <option value="admin">Admin</option>}
+                    <option value="member">Membre</option>
+                    <option value="viewer">Lecteur</option>
+                  </select>
                   <Button
                     variant="ghost"
                     size="sm"
@@ -173,6 +184,7 @@ export function MembersPanel({
                       <UserMinus className="h-4 w-4" />
                     )}
                   </Button>
+                  </>
                 )}
               </li>
             );

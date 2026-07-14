@@ -26,9 +26,11 @@ def _read(filename: str) -> str:
     return (PROMPT_DIR / filename).read_text(encoding="utf-8")
 
 
-def build_system_prompt(persona_id: str) -> str:
+def build_system_prompt(persona_id: str, workspace_type: str = "business") -> str:
     """Assemble le socle commun + le persona, et injecte le contexte dynamique léger."""
-    socle = _read("socle_commun.md")
-    persona = _read(PERSONA_FILES.get(persona_id, "persona_daf.md"))
+    personal = workspace_type == "personal"
+    socle = _read("socle_personnel.md" if personal else "socle_commun.md")
+    persona_file = f"persona_perso_{persona_id}.md" if personal else PERSONA_FILES.get(persona_id, "persona_daf.md")
+    persona = _read(persona_file)
     prompt = "\n\n".join([socle, persona])
     return prompt.replace("{date_du_jour}", date.today().isoformat())

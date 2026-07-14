@@ -12,17 +12,19 @@ export default async function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const profile = await getProfile();
+  // Les trois lectures sont indépendantes → en parallèle. `getAuthUser` et
+  // `getWorkspaces` sont mémoïsés par requête : pas d'appel réseau dupliqué.
+  const [profile, workspace, workspaces] = await Promise.all([
+    getProfile(),
+    getCurrentWorkspace(),
+    getWorkspaces(),
+  ]);
 
   // Pas connecté → on renvoie vers la page de connexion.
   if (!profile) redirect("/login");
 
   // Aucun espace actif → onboarding (choix perso/pro, créer/rejoindre).
-  const workspace = await getCurrentWorkspace();
   if (!workspace) redirect("/onboarding");
-
-  // Tous les espaces de l'utilisateur (pour le sélecteur).
-  const workspaces = await getWorkspaces();
 
   const locale = getLocale();
   const messages = getDictionary(locale);

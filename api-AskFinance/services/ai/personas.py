@@ -14,11 +14,11 @@ AdvisorId = Literal["controleur", "daf", "croissance"]
 PERSONAS: dict[str, dict[str, str]] = {
     "controleur": {
         "label": "Prudence",
-        "description": "Risques, decouvert, charges fixes — securiser la tresorerie.",
+        "description": "Risques, decouvert, charges fixes. Securiser la tresorerie.",
     },
     "daf": {
         "label": "Pilotage",
-        "description": "Marge, rentabilite, arbitrages — piloter les decisions.",
+        "description": "Marge, rentabilite, arbitrages. Piloter les decisions.",
     },
     "croissance": {
         "label": "Croissance",

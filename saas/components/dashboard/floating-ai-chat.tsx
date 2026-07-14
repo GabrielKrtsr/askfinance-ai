@@ -220,9 +220,11 @@ function TypingIndicator({ label }: { label: string }) {
 export function FloatingAiChat({
   userInitials,
   workspaceId,
+  workspaceType,
 }: {
   userInitials: string;
   workspaceId: string;
+  workspaceType: "personal" | "business";
 }) {
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -236,6 +238,9 @@ export function FloatingAiChat({
   const [stepLabel, setStepLabel] = useState<string | null>(null);
   const [awaitingFirstToken, setAwaitingFirstToken] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const suggestions = workspaceType === "personal"
+    ? ["Où part mon argent ce mois-ci ?", "Puis-je tenir mon budget jusqu’à la fin du mois ?", "Quelles charges puis-je réduire ?"]
+    : chatSuggestions;
 
   useEffect(() => {
     function handleOpen() {
@@ -256,7 +261,7 @@ export function FloatingAiChat({
     return () => {
       active = false;
     };
-  }, [open]);
+  }, [open, workspaceId]);
 
   function scrollToBottom() {
     requestAnimationFrame(() => {
@@ -295,7 +300,7 @@ export function FloatingAiChat({
     setStepLabel(`${ASSISTANT_NAME} réfléchit…`);
     scrollToBottom();
 
-    // Id du message assistant en cours de stream — décidé HORS du updater
+    // Id du message assistant en cours de stream, décidé HORS du updater
     // setMessages pour que celui-ci reste pur (sinon React StrictMode le casse).
     let assistantId: string | null = null;
 
@@ -451,7 +456,7 @@ export function FloatingAiChat({
               <div className="min-w-0 flex-1">
                 <h2 className="truncate text-sm font-semibold">{ASSISTANT_NAME}</h2>
                 <p className="truncate text-xs text-muted-foreground">
-                  Copilote de trésorerie · répond à partir de vos données
+                  {workspaceType === "personal" ? "Coach financier · répond à partir de vos données" : "Copilote de trésorerie · répond à partir de vos données"}
                 </p>
               </div>
               <Select
@@ -511,13 +516,13 @@ export function FloatingAiChat({
                       Bonjour, je suis {ASSISTANT_NAME}
                     </h3>
                     <p className="max-w-md text-sm text-muted-foreground">
-                      Votre copilote de trésorerie. Posez une question sur votre
-                      trésorerie, vos dépenses ou vos prévisions — je réponds à
-                      partir de vos données.
+                      {workspaceType === "personal"
+                        ? "Votre coach financier personnel. Posez une question sur vos dépenses, votre budget ou vos prévisions. Je réponds à partir de vos données."
+                        : "Votre copilote de trésorerie. Posez une question sur votre trésorerie, vos dépenses ou vos prévisions. Je réponds à partir de vos données."}
                     </p>
                   </div>
                   <div className="w-full max-w-md space-y-2">
-                    {chatSuggestions.map((suggestion) => (
+                    {suggestions.map((suggestion) => (
                       <button
                         key={suggestion}
                         type="button"
@@ -575,7 +580,7 @@ export function FloatingAiChat({
         </aside>
       ) : null}
 
-      {/* Bouton flottant (avatar de Yassia) — masqué quand le panneau est ouvert. */}
+      {/* Bouton flottant (avatar de Yassia), masqué quand le panneau est ouvert. */}
       {!open ? (
         <button
           type="button"

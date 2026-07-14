@@ -50,7 +50,7 @@ const en: Messages = {
   dashboard: {
     greeting: "Hello 👋",
     greetingName: "Hello, {name} 👋",
-    subtitle: "Here's your financial overview — {month}.",
+    subtitle: "Here's your financial overview for {month}.",
     subtitleNoMonth: "Here's your financial overview.",
     kpiBalance: "Cash balance",
     kpiBalancePerso: "Balance",

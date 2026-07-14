@@ -7,7 +7,7 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  // Tout sauf les assets statiques (et les images) — pas besoin d'y refresh la session.
+  // Tout sauf les assets statiques et les images. Pas besoin d'y rafraîchir la session.
   matcher: [
     "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],

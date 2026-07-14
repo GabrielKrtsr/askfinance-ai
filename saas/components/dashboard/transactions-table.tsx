@@ -1,17 +1,23 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useState, useTransition } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import {
   ChevronDown,
   ChevronsUpDown,
   ChevronUp,
+  Check,
+  Pencil,
   Search,
   SlidersHorizontal,
+  X,
 } from "lucide-react";
+import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -20,16 +26,28 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn, formatEUR } from "@/lib/utils";
-import type { TransactionRow } from "@/lib/data/transactions";
+import type {
+  TransactionFilters,
+  TransactionRow,
+  TransactionSort,
+} from "@/lib/data/transactions";
 import { ShareToGroupButton } from "@/components/dashboard/share-to-group";
+import { updateTransactionCategory } from "@/lib/actions/transaction-categories";
 
 interface TransactionsTableProps {
   transactions: TransactionRow[];
   categories: string[];
+  filters: TransactionFilters;
+  total: number;
+  page: number;
+  pageCount: number;
+  totalIn: number;
+  totalOut: number;
+  net: number;
   groups?: { id: string; name: string }[];
 }
 
-type SortKey = "merchant" | "category" | "amount";
+type SortKey = Exclude<TransactionSort, "date">;
 
 function SortHeader({
   label,
@@ -76,65 +94,83 @@ function SortHeader({
 export function TransactionsTable({
   transactions,
   categories,
+  filters,
+  total,
+  page,
+  pageCount,
+  totalIn,
+  totalOut,
+  net,
   groups = [],
 }: TransactionsTableProps) {
-  const [query, setQuery] = useState("");
-  const [category, setCategory] = useState("all");
-  const [type, setType] = useState("all");
-  const [from, setFrom] = useState("");
-  const [to, setTo] = useState("");
+  const router = useRouter();
+  const pathname = usePathname();
+  const [isPending, startTransition] = useTransition();
+  const [query, setQuery] = useState(filters.query ?? "");
+  const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
+  const [editedCategory, setEditedCategory] = useState("");
+  const [applyCategoryRule, setApplyCategoryRule] = useState(true);
+  const [savingCategory, setSavingCategory] = useState(false);
+  const sortKey = filters.sort && filters.sort !== "date" ? filters.sort : null;
+  const sortDir = filters.direction ?? "desc";
 
-  const filtered = useMemo(() => {
-    return transactions.filter((t) => {
-      const matchesQuery = t.merchant
-        .toLowerCase()
-        .includes(query.toLowerCase());
-      const matchesCategory = category === "all" || t.category === category;
-      const matchesType = type === "all" || t.type === type;
-      const matchesFrom = !from || t.date >= from;
-      const matchesTo = !to || t.date <= to;
-      return matchesQuery && matchesCategory && matchesType && matchesFrom && matchesTo;
-    });
-  }, [transactions, query, category, type, from, to]);
-
-  const [sortKey, setSortKey] = useState<SortKey | null>(null);
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
-
-  function toggleSort(key: SortKey) {
-    if (sortKey === key) {
-      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-    } else {
-      setSortKey(key);
-      setSortDir(key === "amount" ? "desc" : "asc");
+  async function saveCategory(transactionId: string) {
+    if (!editedCategory.trim()) return;
+    setSavingCategory(true);
+    try {
+      await updateTransactionCategory({
+        transactionId,
+        category: editedCategory,
+        applyToMerchant: applyCategoryRule,
+      });
+      toast.success(
+        applyCategoryRule
+          ? "Catégorie enregistrée et règle créée"
+          : "Catégorie enregistrée"
+      );
+      setEditingCategoryId(null);
+      router.refresh();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Modification impossible.");
+    } finally {
+      setSavingCategory(false);
     }
   }
 
-  const sorted = useMemo(() => {
-    if (!sortKey) return filtered;
-    const arr = [...filtered];
-    arr.sort((a, b) => {
-      const cmp =
-        sortKey === "amount"
-          ? a.amount - b.amount
-          : a[sortKey].localeCompare(b[sortKey]);
-      return sortDir === "asc" ? cmp : -cmp;
-    });
-    return arr;
-  }, [filtered, sortKey, sortDir]);
+  const updateParams = useCallback((changes: Record<string, string | undefined>) => {
+    const params = new URLSearchParams(window.location.search);
+    for (const [key, value] of Object.entries(changes)) {
+      if (value) params.set(key, value);
+      else params.delete(key);
+    }
+    if (!("page" in changes)) params.delete("page");
+    startTransition(() => router.replace(`${pathname}?${params.toString()}`, { scroll: false }));
+  }, [pathname, router]);
 
-  const totalIn = filtered
-    .filter((t) => t.type === "credit")
-    .reduce((s, t) => s + t.amount, 0);
-  const totalOut = filtered
-    .filter((t) => t.type === "debit")
-    .reduce((s, t) => s + t.amount, 0);
+  useEffect(() => setQuery(filters.query ?? ""), [filters.query]);
+  useEffect(() => {
+    if (query === (filters.query ?? "")) return;
+    const timer = window.setTimeout(
+      () => updateParams({ q: query.trim() || undefined }),
+      350
+    );
+    return () => window.clearTimeout(timer);
+  }, [filters.query, query, updateParams]);
+
+  function toggleSort(key: SortKey) {
+    if (sortKey === key) {
+      updateParams({ sort: key, dir: sortDir === "asc" ? "desc" : "asc" });
+    } else {
+      updateParams({ sort: key, dir: key === "amount" ? "desc" : "asc" });
+    }
+  }
 
   return (
     <div className="space-y-6">
       {/* Nombre de résultats (le titre de page est fourni par la page parente) */}
       <p className="text-sm text-muted-foreground">
-        {filtered.length} transaction{filtered.length > 1 ? "s" : ""} affichée
-        {filtered.length > 1 ? "s" : ""}
+        {total} transaction{total > 1 ? "s" : ""} trouvée{total > 1 ? "s" : ""}
+        {isPending ? " · Actualisation…" : ""}
       </p>
 
       {/* Récap */}
@@ -159,10 +195,10 @@ export function TransactionsTable({
             <p
               className={cn(
                 "mt-1 text-xl font-bold",
-                totalIn + totalOut >= 0 ? "text-emerald-600" : "text-red-500"
+                net >= 0 ? "text-emerald-600" : "text-red-500"
               )}
             >
-              {formatEUR(totalIn + totalOut)}
+              {formatEUR(net)}
             </p>
           </CardContent>
         </Card>
@@ -181,7 +217,10 @@ export function TransactionsTable({
             />
           </div>
           <div className="flex flex-wrap items-center gap-3">
-            <Select value={category} onValueChange={setCategory}>
+            <Select
+              value={filters.category ?? "all"}
+              onValueChange={(value) => updateParams({ category: value === "all" ? undefined : value })}
+            >
               <SelectTrigger className="w-[180px]">
                 <SlidersHorizontal className="mr-2 h-4 w-4 text-muted-foreground" />
                 <SelectValue placeholder="Catégorie" />
@@ -195,7 +234,10 @@ export function TransactionsTable({
                 ))}
               </SelectContent>
             </Select>
-            <Select value={type} onValueChange={setType}>
+            <Select
+              value={filters.type ?? "all"}
+              onValueChange={(value) => updateParams({ type: value === "all" ? undefined : value })}
+            >
               <SelectTrigger className="w-[140px]">
                 <SelectValue placeholder="Type" />
               </SelectTrigger>
@@ -208,27 +250,26 @@ export function TransactionsTable({
             <div className="flex items-center gap-1.5">
               <input
                 type="date"
-                value={from}
-                onChange={(e) => setFrom(e.target.value)}
+                value={filters.from ?? ""}
+                onChange={(e) => updateParams({ from: e.target.value || undefined })}
                 aria-label="Date de début"
                 className="h-10 rounded-lg border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
               />
               <span className="text-sm text-muted-foreground">→</span>
               <input
                 type="date"
-                value={to}
-                onChange={(e) => setTo(e.target.value)}
+                value={filters.to ?? ""}
+                onChange={(e) => updateParams({ to: e.target.value || undefined })}
                 aria-label="Date de fin"
                 className="h-10 rounded-lg border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
               />
             </div>
-            {(from || to) && (
+            {(filters.from || filters.to) && (
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={() => {
-                  setFrom("");
-                  setTo("");
+                  updateParams({ from: undefined, to: undefined });
                 }}
               >
                 Réinitialiser
@@ -274,16 +315,13 @@ export function TransactionsTable({
 
           {transactions.length === 0 ? (
             <div className="px-6 py-16 text-center text-sm text-muted-foreground">
-              Aucune transaction. Importez un relevé depuis le tableau de bord
-              pour commencer.
-            </div>
-          ) : filtered.length === 0 ? (
-            <div className="px-6 py-16 text-center text-sm text-muted-foreground">
-              Aucune transaction ne correspond à vos filtres.
+              {filters.query || filters.category || filters.type || filters.from || filters.to
+                ? "Aucune transaction ne correspond à vos filtres."
+                : "Aucune transaction. Importez un relevé depuis le tableau de bord pour commencer."}
             </div>
           ) : (
             <ul className="divide-y">
-              {sorted.map((t) => (
+              {transactions.map((t) => (
                 <li
                   key={t.id}
                   className="grid grid-cols-2 gap-3 px-6 py-4 transition-colors hover:bg-muted/40 md:grid-cols-[1fr_auto_auto_auto] md:items-center md:gap-4"
@@ -295,8 +333,65 @@ export function TransactionsTable({
                       {t.account ? ` · ${t.account}` : ""}
                     </p>
                   </div>
-                  <div className="md:w-40">
-                    <Badge variant="muted">{t.category}</Badge>
+                  <div className="md:w-56">
+                    {editingCategoryId === t.id ? (
+                      <div className="space-y-1.5">
+                        <div className="flex items-center gap-1">
+                          <Input
+                            value={editedCategory}
+                            onChange={(event) => setEditedCategory(event.target.value)}
+                            list="transaction-category-options"
+                            className="h-8 min-w-0"
+                            autoFocus
+                            onKeyDown={(event) => {
+                              if (event.key === "Enter") saveCategory(t.id);
+                              if (event.key === "Escape") setEditingCategoryId(null);
+                            }}
+                          />
+                          <Button
+                            type="button"
+                            size="icon"
+                            variant="ghost"
+                            className="h-8 w-8"
+                            disabled={savingCategory}
+                            onClick={() => saveCategory(t.id)}
+                          >
+                            <Check className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button
+                            type="button"
+                            size="icon"
+                            variant="ghost"
+                            className="h-8 w-8"
+                            onClick={() => setEditingCategoryId(null)}
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                        <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                          <input
+                            type="checkbox"
+                            checked={applyCategoryRule}
+                            onChange={(event) => setApplyCategoryRule(event.target.checked)}
+                          />
+                          Appliquer à ce libellé à l’avenir
+                        </label>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        className="group/category inline-flex items-center gap-1"
+                        onClick={() => {
+                          setEditingCategoryId(t.id);
+                          setEditedCategory(t.category);
+                          setApplyCategoryRule(true);
+                        }}
+                        title="Modifier la catégorie"
+                      >
+                        <Badge variant="muted">{t.category}</Badge>
+                        <Pencil className="h-3 w-3 opacity-0 transition-opacity group-hover/category:opacity-60" />
+                      </button>
+                    )}
                   </div>
                   <div className="md:w-28">
                     {t.type === "debit" && groups.length > 0 ? (
@@ -320,6 +415,33 @@ export function TransactionsTable({
           )}
         </CardContent>
       </Card>
+
+      {pageCount > 1 && (
+        <div className="flex items-center justify-between gap-4">
+          <Button
+            variant="outline"
+            disabled={page <= 1 || isPending}
+            onClick={() => updateParams({ page: String(page - 1) })}
+          >
+            Précédent
+          </Button>
+          <p className="text-sm text-muted-foreground">
+            Page {page} sur {pageCount}
+          </p>
+          <Button
+            variant="outline"
+            disabled={page >= pageCount || isPending}
+            onClick={() => updateParams({ page: String(page + 1) })}
+          >
+            Suivant
+          </Button>
+        </div>
+      )}
+      <datalist id="transaction-category-options">
+        {categories.map((category) => (
+          <option key={category} value={category} />
+        ))}
+      </datalist>
     </div>
   );
 }

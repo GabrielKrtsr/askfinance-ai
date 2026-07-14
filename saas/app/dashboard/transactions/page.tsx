@@ -1,6 +1,10 @@
 import { redirect } from "next/navigation";
 
-import { getTransactions } from "@/lib/data/transactions";
+import {
+  getTransactions,
+  type TransactionFilters,
+  type TransactionSort,
+} from "@/lib/data/transactions";
 import { getDashboardData } from "@/lib/data/dashboard";
 import { getCurrentWorkspace, getWorkspaces } from "@/lib/data/workspace";
 import { TransactionsTable } from "@/components/dashboard/transactions-table";
@@ -22,13 +26,36 @@ function EmptyState({ children }: { children: React.ReactNode }) {
   );
 }
 
-export default async function TransactionsPage() {
+interface TransactionsPageProps {
+  searchParams?: Record<string, string | string[] | undefined>;
+}
+
+function one(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+export default async function TransactionsPage({ searchParams = {} }: TransactionsPageProps) {
   const workspace = await getCurrentWorkspace();
   if (workspace?.type === "group") redirect("/dashboard/shared");
   const isPerso = workspace?.type === "personal";
 
   const { t, locale } = getT();
-  const { transactions, categories } = await getTransactions();
+  const rawSort = one(searchParams.sort);
+  const filters: TransactionFilters = {
+    page: Number(one(searchParams.page)) || 1,
+    query: one(searchParams.q),
+    category: one(searchParams.category),
+    type: ["debit", "credit"].includes(one(searchParams.type) ?? "")
+      ? (one(searchParams.type) as "debit" | "credit")
+      : undefined,
+    from: one(searchParams.from),
+    to: one(searchParams.to),
+    sort: ["date", "merchant", "category", "amount"].includes(rawSort ?? "")
+      ? (rawSort as TransactionSort)
+      : "date",
+    direction: one(searchParams.dir) === "asc" ? "asc" : "desc",
+  };
+  const transactionData = await getTransactions(filters);
   const groups = (await getWorkspaces())
     .filter((w) => w.type === "group")
     .map((w) => ({ id: w.id, name: w.name }));
@@ -43,11 +70,11 @@ export default async function TransactionsPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">
-          {isPerso ? "DÃ©penses" : t("pages.transactionsTitle")}
+          {isPerso ? "Dépenses" : t("pages.transactionsTitle")}
         </h1>
         <p className="text-sm text-muted-foreground">
           {isPerso
-            ? "Vos dÃ©penses, par catÃ©gorie et en dÃ©tail."
+            ? "Vos dépenses, par catégorie et en détail."
             : t("pages.transactionsSubtitle")}
         </p>
       </div>
@@ -79,8 +106,15 @@ export default async function TransactionsPage() {
       </Card>
 
       <TransactionsTable
-        transactions={transactions}
-        categories={categories}
+        transactions={transactionData.transactions}
+        categories={transactionData.categories}
+        filters={filters}
+        total={transactionData.total}
+        page={transactionData.page}
+        pageCount={transactionData.pageCount}
+        totalIn={transactionData.totalIn}
+        totalOut={transactionData.totalOut}
+        net={transactionData.net}
         groups={groups}
       />
     </div>

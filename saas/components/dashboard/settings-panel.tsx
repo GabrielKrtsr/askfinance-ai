@@ -36,10 +36,10 @@ export function SettingsPanel({
 }) {
   const router = useRouter();
   const { locale, t } = useI18n();
-  const [theme, setTheme] = useState<Theme>("system");
+  const [theme, setTheme] = useState<Theme>("light");
 
   useEffect(() => {
-    setTheme((localStorage.getItem("theme") as Theme) ?? "system");
+    setTheme((localStorage.getItem("theme") as Theme) ?? "light");
   }, []);
 
   // Thème : stocké en localStorage (préférence d'appareil).
@@ -143,7 +143,7 @@ export function SettingsPanel({
               <User className="h-5 w-5" />
             </span>
             <div className="min-w-0">
-              <p className="truncate font-medium">{user.fullName || "—"}</p>
+              <p className="truncate font-medium">{user.fullName || "Non renseigné"}</p>
               <p className="truncate text-muted-foreground">{user.email}</p>
             </div>
           </div>
