@@ -36,7 +36,7 @@ export function AuthShell({ children }: { children: React.ReactNode }) {
           <div className="min-w-0 flex-1 lg:hidden">
             <Logo className="[&>span]:hidden min-[440px]:[&>span]:inline" />
           </div>
-          <div className="ml-auto shrink-0 lg:ml-0">
+          <div className="ml-auto shrink-0">
             <PublicPreferences
               labels={{ language: common.language, light: common.light, dark: common.dark }}
             />
