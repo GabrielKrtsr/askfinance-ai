@@ -117,7 +117,6 @@ export function MembersPanel({
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium">
                     {m.name}
-                    {isSelf && <span className="text-muted-foreground"> {copy.you}</span>}
                   </p>
                   <p
                     className={

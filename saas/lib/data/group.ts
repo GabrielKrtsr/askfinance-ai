@@ -1,5 +1,9 @@
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import {
+  authUserDisplayName,
+  memberIdentifierFallback,
+} from "@/lib/data/user-name";
 
 export interface LedgerMember {
   userId: string;
@@ -140,12 +144,26 @@ export async function getGroupLedger(workspaceId: string): Promise<GroupLedger |
   const nameById = new Map<string, string>(
     ((profileRows ?? []) as ProfileRow[]).map((p) => [
       p.id,
-      [p.first_name, p.last_name].filter(Boolean).join(" ") || "Membre",
+      [p.first_name, p.last_name].filter(Boolean).join(" ").trim(),
     ])
   );
+
+  // Certains anciens comptes n'ont pas de profil complet. Dans ce cas, on
+  // récupère le nom enregistré par Supabase Auth (email ou fournisseur OAuth).
+  const missingNameIds = activeIds.filter((id) => !nameById.get(id));
+  await Promise.all(
+    missingNameIds.map(async (id) => {
+      const { data } = await admin.auth.admin.getUserById(id);
+      const authName = authUserDisplayName(data.user);
+      if (authName) nameById.set(id, authName);
+    })
+  );
+
+  const memberName = (id: string) =>
+    nameById.get(id) || memberIdentifierFallback(id);
   const members: LedgerMember[] = activeIds.map((id) => ({
     userId: id,
-    name: nameById.get(id) ?? "Membre",
+    name: memberName(id),
   }));
 
   const { data: expRows } = await admin
@@ -216,7 +234,7 @@ export async function getGroupLedger(workspaceId: string): Promise<GroupLedger |
     amount: Number(e.amount),
     category: e.category,
     paidBy: e.paid_by,
-    paidByName: nameById.get(e.paid_by) ?? "Membre",
+    paidByName: memberName(e.paid_by),
     yourShare: round2(yourShareByExp.get(e.id) ?? 0),
   }));
 
@@ -225,9 +243,9 @@ export async function getGroupLedger(workspaceId: string): Promise<GroupLedger |
     date: s.date,
     amount: Number(s.amount),
     fromUserId: s.from_user,
-    fromName: nameById.get(s.from_user) ?? "Membre",
+    fromName: memberName(s.from_user),
     toUserId: s.to_user,
-    toName: nameById.get(s.to_user) ?? "Membre",
+    toName: memberName(s.to_user),
     status: s.status ?? "paid",
   }));
 

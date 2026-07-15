@@ -3,6 +3,10 @@ import { cookies } from "next/headers";
 
 import { createClient, getAuthUser } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import {
+  authUserDisplayName,
+  memberIdentifierFallback,
+} from "@/lib/data/user-name";
 
 export type WorkspaceType = "personal" | "business" | "group";
 export type OnboardingStatus = "pending" | "completed" | "skipped";
@@ -28,39 +32,6 @@ interface MemberRow {
     type: WorkspaceType;
     onboarding_status: OnboardingStatus;
   };
-}
-
-function firstNonEmpty(...vals: (string | null | undefined)[]): string {
-  for (const v of vals) {
-    if (v && v.trim()) return v.trim();
-  }
-  return "";
-}
-
-function currentUserDisplayName(user: {
-  email?: string | null;
-  user_metadata?: Record<string, unknown> | null;
-}): string {
-  const meta = user.user_metadata ?? {};
-  const fullMeta =
-    typeof meta.full_name === "string"
-      ? meta.full_name
-      : typeof meta.name === "string"
-        ? meta.name
-        : "";
-  const [metaFirst, ...metaRest] = fullMeta.split(" ");
-  const firstName = firstNonEmpty(
-    typeof meta.first_name === "string" ? meta.first_name : null,
-    typeof meta.given_name === "string" ? meta.given_name : null,
-    metaFirst
-  );
-  const lastName = firstNonEmpty(
-    typeof meta.last_name === "string" ? meta.last_name : null,
-    typeof meta.family_name === "string" ? meta.family_name : null,
-    metaRest.join(" ")
-  );
-
-  return [firstName, lastName].filter(Boolean).join(" ") || user.email || "Vous";
 }
 
 // Espaces dont l'utilisateur est membre ACTIF (RLS : ses propres adhésions).
@@ -156,7 +127,16 @@ export async function getWorkspaceMembers(
       (p) => [p.id, [p.first_name, p.last_name].filter(Boolean).join(" ")]
     )
   );
-  nameById.set(user.id, nameById.get(user.id) || currentUserDisplayName(user));
+  const missingNameIds = rows
+    .map((row) => row.user_id)
+    .filter((id) => !nameById.get(id));
+  await Promise.all(
+    missingNameIds.map(async (id) => {
+      const { data } = await admin.auth.admin.getUserById(id);
+      const authName = authUserDisplayName(data.user);
+      if (authName) nameById.set(id, authName);
+    })
+  );
 
   const { data: ws } = await admin
     .from("workspaces")
@@ -166,7 +146,7 @@ export async function getWorkspaceMembers(
 
   const members: WorkspaceMember[] = rows.map((r) => ({
     userId: r.user_id,
-    name: nameById.get(r.user_id) || (r.user_id === user.id ? "Vous" : "Utilisateur"),
+    name: nameById.get(r.user_id) || memberIdentifierFallback(r.user_id),
     role: r.role,
     status: r.status,
   }));
