@@ -2,24 +2,60 @@
 from __future__ import annotations
 
 import io
+import re
 import unicodedata
 from dataclasses import dataclass
 
 import pandas as pd
 
-# Alias de colonnes (comparés après normalisation : minuscules, sans accents).
+# Alias de colonnes français et anglais. Ils sont comparés après normalisation
+# (minuscules, sans accents ni ponctuation) afin d'accepter les variantes des banques.
 DATE_ALIASES = [
-    "date", "date operation", "date d'operation",
-    "date de comptabilisation", "date de valeur",
+    "date",
+    "posting date", "booking date", "accounting date",
+    "transaction date", "operation date", "processed date",
+    "value date", "settlement date",
+    "date de comptabilisation", "date comptabilisation",
+    "date d'operation", "date de l'operation", "date operation",
+    "date d'ecriture", "date ecriture", "date du mouvement",
+    "date de valeur", "date de reglement",
 ]
 MERCHANT_ALIASES = [
-    "libelle simplifie", "libelle operation", "libelle",
-    "merchant", "label", "description", "intitule",
+    "libelle simplifie", "description simplifiee",
+    "simplified description", "transaction description", "operation description",
+    "libelle operation", "libelle de l'operation", "libelle",
+    "payee", "merchant", "counterparty", "beneficiary",
+    "label", "description", "name", "memo", "narrative", "details",
+    "intitule", "beneficiaire", "nom du beneficiaire", "contrepartie", "motif",
 ]
-AMOUNT_ALIASES = ["montant", "amount", "valeur"]
-CATEGORY_ALIASES = ["categorie", "category"]
-ACCOUNT_ALIASES = ["compte", "account"]
-REFERENCE_ALIASES = ["reference", "ref"]
+AMOUNT_ALIASES = [
+    "amount", "transaction amount", "signed amount", "net amount",
+    "amount eur", "amount euro",
+    "montant", "montant operation", "montant de l'operation",
+    "montant signe", "valeur",
+]
+DEBIT_ALIASES = [
+    "debit", "debit amount", "amount debited",
+    "withdrawal", "withdrawal amount", "outflow", "outgoing amount", "paid out",
+    "montant debit", "montant debite", "somme debit", "retrait",
+]
+CREDIT_ALIASES = [
+    "credit", "credit amount", "amount credited",
+    "deposit", "deposit amount", "inflow", "incoming amount", "paid in",
+    "montant credit", "montant credite", "somme credit", "versement",
+]
+CATEGORY_ALIASES = [
+    "category", "transaction category", "main category", "spending category",
+    "categorie", "categorie operation", "categorie principale",
+]
+ACCOUNT_ALIASES = [
+    "account", "account name", "account number", "bank account",
+    "compte", "nom du compte", "numero de compte", "compte bancaire",
+]
+REFERENCE_ALIASES = [
+    "reference", "transaction reference", "payment reference", "bank reference", "ref",
+    "reference operation", "reference de l'operation", "numero operation",
+]
 
 
 @dataclass
@@ -30,18 +66,20 @@ class ParseResult:
 
 
 def _normalize(name: str) -> str:
-    """'Libellé simplifié' -> 'libelle simplifie' (minuscules, sans accents, sans BOM)."""
+    """"Débit (€)" -> "debit" (minuscules, sans accents, ponctuation ni BOM)."""
     name = str(name).replace("﻿", "").strip().lower()
-    return "".join(
+    name = "".join(
         c for c in unicodedata.normalize("NFD", name)
         if unicodedata.category(c) != "Mn"
     )
+    return re.sub(r"[^\w]+", " ", name.replace("_", " "), flags=re.UNICODE).strip()
 
 
 def _first_present(columns: set[str], aliases: list[str]) -> str | None:
     for alias in aliases:
-        if alias in columns:
-            return alias
+        normalized = _normalize(alias)
+        if normalized in columns:
+            return normalized
     return None
 
 
@@ -89,8 +127,8 @@ def parse_transactions(
     date_col = _first_present(cols, DATE_ALIASES)
     merchant_col = _first_present(cols, MERCHANT_ALIASES)
     amount_col = _first_present(cols, AMOUNT_ALIASES)
-    debit_col = "debit" if "debit" in cols else None
-    credit_col = "credit" if "credit" in cols else None
+    debit_col = _first_present(cols, DEBIT_ALIASES)
+    credit_col = _first_present(cols, CREDIT_ALIASES)
     category_col = _first_present(cols, CATEGORY_ALIASES)
     account_col = _first_present(cols, ACCOUNT_ALIASES)
     reference_col = _first_present(cols, REFERENCE_ALIASES)
