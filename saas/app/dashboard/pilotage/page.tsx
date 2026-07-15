@@ -27,9 +27,9 @@ export default async function PilotagePage({
     return (
       <div className="space-y-6">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Prévisions</h1>
+          <h1 className="text-2xl font-bold tracking-tight">{t("pages.forecastTitle")}</h1>
           <p className="text-sm text-muted-foreground">
-            Anticipez votre solde et vos charges à venir.
+            {t("pages.forecastSubtitle")}
           </p>
         </div>
 

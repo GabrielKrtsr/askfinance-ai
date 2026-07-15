@@ -10,6 +10,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { createClient } from "@/lib/supabase/client";
 import { getTaxVault, type TaxVault } from "@/lib/services/tax";
 import { formatDateFr, formatEUR } from "@/lib/utils";
+import { useI18n } from "@/lib/i18n/client";
+import { dashboardCopy } from "@/lib/i18n/dashboard";
 
 interface BudgetAlertInput {
   categorie: string;
@@ -38,6 +40,8 @@ export function FinancialInbox({
   workspaceId: string;
   budgets?: BudgetAlertInput[];
 }) {
+  const { locale } = useI18n();
+  const copy = dashboardCopy[locale].inbox;
   const pilotage = usePilotage();
   const [states, setStates] = useState<Record<string, AlertStateRow>>({});
   const [tax, setTax] = useState<TaxVault | null>(null);
@@ -53,7 +57,7 @@ export function FinancialInbox({
       getTaxVault(workspaceId).catch(() => null),
     ]).then(([stateResult, taxResult]) => {
       if (stateResult.error) {
-        toast.error("L’Inbox ne peut pas enregistrer vos décisions.", {
+        toast.error(copy.persistenceFailed, {
           description: stateResult.error.message,
         });
       }
@@ -62,7 +66,7 @@ export function FinancialInbox({
       setStates(next);
       setTax(taxResult);
     });
-  }, [workspaceId]);
+  }, [copy.persistenceFailed, workspaceId]);
 
   const alerts = useMemo(() => {
     const data = pilotage?.data;
@@ -73,24 +77,24 @@ export function FinancialInbox({
       items.push({
         key: `overdraft:${data.forecast.premier_decouvert}`,
         severity: data.forecast.alerte_30j ? "critical" : "warning",
-        title: "Risque de découvert",
-        detail: `Premier passage sous zéro estimé le ${formatDateFr(data.forecast.premier_decouvert)} · minimum ${formatEUR(data.forecast.solde_min)}.`,
+        title: copy.overdraftTitle,
+        detail: copy.overdraftDetail(formatDateFr(data.forecast.premier_decouvert), formatEUR(data.forecast.solde_min)),
       });
     }
     for (const receivable of data.receivables.en_retard) {
       items.push({
         key: `receivable:${receivable.id}`,
         severity: "critical",
-        title: `${receivable.client} doit encore ${formatEUR(receivable.montant_attendu)}`,
-        detail: `${receivable.jours_retard} jour(s) de retard · relance prête dans le radar des encaissements.`,
+        title: copy.receivableTitle(receivable.client, formatEUR(receivable.montant_attendu)),
+        detail: copy.receivableDetail(receivable.jours_retard),
       });
     }
     for (const charge of data.recurring.charges.filter((item) => item.alerte)) {
       items.push({
         key: `recurring:${charge.merchant}:${charge.alerte}`,
         severity: "warning",
-        title: charge.alerte === "hausse" ? `${charge.merchant} a augmenté` : `Doublon possible : ${charge.merchant}`,
-        detail: `${formatEUR(charge.montant_mensuel)} par mois · à vérifier.`,
+        title: charge.alerte === "hausse" ? copy.increaseTitle(charge.merchant) : copy.duplicateTitle(charge.merchant),
+        detail: copy.recurringDetail(formatEUR(charge.montant_mensuel)),
       });
     }
     for (const budget of budgets) {
@@ -99,8 +103,8 @@ export function FinancialInbox({
         items.push({
           key: `budget:${budget.month}:${budget.categorie}`,
           severity: ratio > 1 ? "critical" : "warning",
-          title: ratio > 1 ? `Budget ${budget.categorie} dépassé` : `Budget ${budget.categorie} bientôt atteint`,
-          detail: `${formatEUR(budget.depense)} consommés sur ${formatEUR(budget.budget)} (${Math.round(ratio * 100)} %).`,
+          title: ratio > 1 ? copy.budgetOver(budget.categorie) : copy.budgetNear(budget.categorie),
+          detail: copy.budgetDetail(formatEUR(budget.depense), formatEUR(budget.budget), Math.round(ratio * 100)),
         });
       }
     }
@@ -111,8 +115,8 @@ export function FinancialInbox({
         items.push({
           key: `tax:${nextTax.type}:${nextTax.date}`,
           severity: "info",
-          title: `${nextTax.libelle} dans ${days} jour(s)`,
-          detail: `${formatEUR(nextTax.montant_estime)} estimés · montant indicatif à valider.`,
+          title: copy.taxDue(nextTax.libelle, days),
+          detail: copy.taxDetail(formatEUR(nextTax.montant_estime)),
         });
       }
     }
@@ -125,7 +129,7 @@ export function FinancialInbox({
       }
       return true;
     });
-  }, [budgets, pilotage?.data, states, tax]);
+  }, [budgets, copy, pilotage?.data, states, tax]);
 
   async function setAlertState(alertKey: string, status: "resolved" | "snoozed") {
     setBusy(alertKey);
@@ -141,7 +145,7 @@ export function FinancialInbox({
     try {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("Session expirée. Reconnectez-vous.");
+      if (!user) throw new Error(copy.sessionExpired);
       const { error } = await supabase.from("financial_alert_states").upsert(
         {
           workspace_id: workspaceId,
@@ -153,7 +157,7 @@ export function FinancialInbox({
         { onConflict: "workspace_id,alert_key" }
       );
       if (error) throw new Error(error.message);
-      toast.success(status === "resolved" ? "Alerte résolue" : "Alerte reportée de 7 jours");
+      toast.success(status === "resolved" ? copy.resolved : copy.postponed);
     } catch (error) {
       setStates((current) => {
         const next = { ...current };
@@ -161,8 +165,8 @@ export function FinancialInbox({
         else delete next[alertKey];
         return next;
       });
-      toast.error("Impossible d’enregistrer cette décision.", {
-        description: error instanceof Error ? error.message : "Erreur inconnue.",
+      toast.error(copy.decisionFailed, {
+        description: error instanceof Error ? error.message : copy.unknownError,
       });
     } finally {
       setBusy(null);
@@ -174,7 +178,7 @@ export function FinancialInbox({
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Inbox className="h-5 w-5 text-primary" />
-          À traiter
+          {copy.title}
           {alerts.length > 0 && (
             <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs text-primary">{alerts.length}</span>
           )}
@@ -182,9 +186,9 @@ export function FinancialInbox({
       </CardHeader>
       <CardContent>
         {pilotage?.loading ? (
-          <div className="flex items-center justify-center py-8 text-sm text-muted-foreground"><Loader2 className="mr-2 h-4 w-4 animate-spin" />Analyse en cours…</div>
+          <div className="flex items-center justify-center py-8 text-sm text-muted-foreground"><Loader2 className="mr-2 h-4 w-4 animate-spin" />{copy.analyzing}</div>
         ) : alerts.length === 0 ? (
-          <div className="flex items-center justify-center py-8 text-sm text-muted-foreground"><Check className="mr-2 h-4 w-4 text-emerald-600" />Rien d’urgent pour le moment.</div>
+          <div className="flex items-center justify-center py-8 text-sm text-muted-foreground"><Check className="mr-2 h-4 w-4 text-emerald-600" />{copy.empty}</div>
         ) : (
           <ul className="divide-y">
             {alerts.map((alert) => (
@@ -192,8 +196,8 @@ export function FinancialInbox({
                 <AlertTriangle className={alert.severity === "critical" ? "h-5 w-5 text-red-500" : alert.severity === "warning" ? "h-5 w-5 text-amber-500" : "h-5 w-5 text-primary"} />
                 <div className="min-w-0 flex-1"><p className="text-sm font-medium">{alert.title}</p><p className="text-xs text-muted-foreground">{alert.detail}</p></div>
                 <div className="flex gap-1">
-                  <Button size="sm" variant="ghost" disabled={busy === alert.key} onClick={() => setAlertState(alert.key, "snoozed")}><Clock3 className="h-3.5 w-3.5" />7 jours</Button>
-                  <Button size="sm" variant="outline" disabled={busy === alert.key} onClick={() => setAlertState(alert.key, "resolved")}><Check className="h-3.5 w-3.5" />Résoudre</Button>
+                  <Button size="sm" variant="ghost" disabled={busy === alert.key} onClick={() => setAlertState(alert.key, "snoozed")}><Clock3 className="h-3.5 w-3.5" />{copy.postpone}</Button>
+                  <Button size="sm" variant="outline" disabled={busy === alert.key} onClick={() => setAlertState(alert.key, "resolved")}><Check className="h-3.5 w-3.5" />{copy.resolve}</Button>
                 </div>
               </li>
             ))}

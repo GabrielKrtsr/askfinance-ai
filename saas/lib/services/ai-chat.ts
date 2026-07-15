@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/client";
+import type { Locale } from "@/lib/i18n/config";
 
 export type AdvisorId = "controleur" | "daf" | "croissance";
 
@@ -53,7 +54,8 @@ export async function sendAiChatMessage(
   message: string,
   advisor: AdvisorId,
   conversationId: string | null,
-  workspaceId: string
+  workspaceId: string,
+  language: Locale
 ): Promise<ChatResponse> {
   const supabase = createClient();
   const {
@@ -71,7 +73,12 @@ export async function sendAiChatMessage(
       "Content-Type": "application/json",
       "X-Workspace-Id": workspaceId,
     },
-    body: JSON.stringify({ message, advisor, conversation_id: conversationId }),
+    body: JSON.stringify({
+      message,
+      advisor,
+      conversation_id: conversationId,
+      language,
+    }),
   });
 
   if (!res.ok) {
@@ -103,97 +110,12 @@ export async function getConversationMessages(
   const supabase = createClient();
   const { data } = await supabase
     .from("messages")
-    .select("role, content, created_at")
+    .select("id, role, content, created_at")
     .eq("conversation_id", conversationId)
-    .order("created_at", { ascending: true });
+    .order("created_at", { ascending: true })
+    .order("id", { ascending: true });
   return (data ?? []).map((row) => ({
     role: row.role as "user" | "assistant",
     content: row.content as string,
   }));
-}
-
-export interface StreamCallbacks {
-  onMeta?: (conversationId: string) => void;
-  onStep?: (label: string) => void;
-  onToken?: (text: string) => void;
-  onError?: (message: string) => void;
-  onDone?: () => void;
-}
-
-// Envoie une question en streaming (SSE) et invoque les callbacks au fil de l'eau.
-export async function streamAiChatMessage(
-  message: string,
-  advisor: AdvisorId,
-  conversationId: string | null,
-  workspaceId: string,
-  callbacks: StreamCallbacks
-): Promise<void> {
-  const supabase = createClient();
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-  const token = session?.access_token;
-  if (!token) {
-    throw new Error("Vous devez être connecté pour utiliser le copilote IA.");
-  }
-
-  const res = await fetch(`${API_URL}/ai/chat/stream`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-      "X-Workspace-Id": workspaceId,
-    },
-    body: JSON.stringify({ message, advisor, conversation_id: conversationId }),
-  });
-
-  if (!res.ok || !res.body) {
-    const payload = await res.json().catch(() => null);
-    throw new Error(payload?.detail ?? "Échec de l'appel au copilote IA.");
-  }
-
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-
-    // Les événements SSE sont séparés par une ligne vide.
-    const chunks = buffer.split("\n\n");
-    buffer = chunks.pop() ?? "";
-    for (const chunk of chunks) {
-      let event = "";
-      let data = "";
-      for (const line of chunk.split("\n")) {
-        if (line.startsWith("event:")) event = line.slice(6).trim();
-        else if (line.startsWith("data:")) data += line.slice(5).trim();
-      }
-      if (!data) continue;
-      let parsed: {
-        conversation_id?: string;
-        label?: string;
-        text?: string;
-        message?: string;
-      };
-      try {
-        parsed = JSON.parse(data);
-      } catch {
-        continue;
-      }
-      if (event === "meta" && parsed.conversation_id) {
-        callbacks.onMeta?.(parsed.conversation_id);
-      } else if (event === "step" && parsed.label) {
-        callbacks.onStep?.(parsed.label);
-      } else if (event === "token" && parsed.text !== undefined) {
-        callbacks.onToken?.(parsed.text);
-      } else if (event === "error" && parsed.message) {
-        callbacks.onError?.(parsed.message);
-      } else if (event === "done") {
-        callbacks.onDone?.();
-      }
-    }
-  }
 }

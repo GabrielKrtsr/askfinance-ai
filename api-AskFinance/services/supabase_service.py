@@ -164,15 +164,30 @@ def fetch_transactions_for_ai(workspace_id: str, limit: int = 120) -> list[dict]
 
 def fetch_budgets(workspace_id: str) -> list[dict]:
     """Budgets mensuels d'un espace."""
-    response = (
-        _client()
-        .table("budgets")
-        .select("category, amount, month")
-        .eq("workspace_id", workspace_id)
-        .order("month", desc=True)
-        .execute()
-    )
-    return response.data or []
+    try:
+        response = (
+            _client()
+            .table("budgets")
+            .select("category, amount, month")
+            .eq("workspace_id", workspace_id)
+            .order("month", desc=True)
+            .execute()
+        )
+        return response.data or []
+    except Exception as exc:
+        # Compatibilité temporaire avec les bases où la migration des budgets
+        # mensuels n'a pas encore été appliquée. La période reste volontairement
+        # absente : on ne l'invente pas depuis created_at.
+        if "budgets.month does not exist" not in str(exc):
+            raise
+        legacy = (
+            _client()
+            .table("budgets")
+            .select("category, amount")
+            .eq("workspace_id", workspace_id)
+            .execute()
+        )
+        return [{**row, "month": None} for row in (legacy.data or [])]
 
 
 def fetch_expected_receivables(workspace_id: str) -> list[dict]:
@@ -386,15 +401,64 @@ def conversation_belongs_to_user(
     return bool(response.data)
 
 
+def fetch_pending_action(
+    conversation_id: str, user_id: str, workspace_id: str
+) -> dict | None:
+    """Action structurée proposée au tour précédent, si elle existe."""
+    try:
+        response = (
+            _client()
+            .table("conversations")
+            .select("pending_action")
+            .eq("id", conversation_id)
+            .eq("user_id", user_id)
+            .eq("workspace_id", workspace_id)
+            .limit(1)
+            .execute()
+        )
+    except Exception as exc:
+        if "pending_action" not in str(exc):
+            raise
+        print("[ai] migration pending_action non appliquée", flush=True)
+        return None
+    row = (response.data or [None])[0]
+    value = row.get("pending_action") if row else None
+    return value if isinstance(value, dict) else None
+
+
+def set_pending_action(
+    conversation_id: str,
+    user_id: str,
+    workspace_id: str,
+    pending_action: dict | None,
+) -> None:
+    """Remplace ou efface l'action en attente sans analyser le texte du chat."""
+    try:
+        (
+            _client()
+            .table("conversations")
+            .update({"pending_action": pending_action})
+            .eq("id", conversation_id)
+            .eq("user_id", user_id)
+            .eq("workspace_id", workspace_id)
+            .execute()
+        )
+    except Exception as exc:
+        if "pending_action" not in str(exc):
+            raise
+        print("[ai] migration pending_action non appliquée", flush=True)
+
+
 def fetch_recent_messages(conversation_id: str, limit: int = 10) -> list[dict]:
     """Derniers messages d'une conversation (fenêtre de contexte), renvoyés en
     ordre chronologique pour être réinjectés au LLM."""
     response = (
         _client()
         .table("messages")
-        .select("role, content, created_at")
+        .select("id, role, content, created_at")
         .eq("conversation_id", conversation_id)
         .order("created_at", desc=True)
+        .order("id", desc=True)
         .limit(limit)
         .execute()
     )

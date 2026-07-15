@@ -20,12 +20,14 @@ import {
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { useI18n } from "@/lib/i18n/client";
+import { csvGuideCopy, type CsvGuideCopy } from "@/lib/i18n/csv-guide";
 import { cn } from "@/lib/utils";
 
 const CSV_TEMPLATE = [
-  "Date;Libellé;Montant;Catégorie;Référence",
-  "01/07/2026;Virement client;1250,00;Ventes;FAC-104",
-  "02/07/2026;Hébergement;-29,00;Logiciels;VERCEL-JUILLET",
+  "Date;Label;Amount;Category;Reference",
+  "01/07/2026;Client transfer;1250.00;Sales;INV-104",
+  "02/07/2026;Hosting;-29.00;Software;VERCEL-JULY",
 ].join("\r\n");
 
 export function CsvImportGuide({
@@ -35,6 +37,8 @@ export function CsvImportGuide({
   prominent?: boolean;
   className?: string;
 }) {
+  const { locale } = useI18n();
+  const copy = csvGuideCopy[locale];
   const [open, setOpen] = useState(false);
   const [page, setPage] = useState(0);
 
@@ -59,7 +63,7 @@ export function CsvImportGuide({
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = "modele-import-askfinance.csv";
+    link.download = "askfinance-import-template.csv";
     document.body.appendChild(link);
     link.click();
     link.remove();
@@ -78,7 +82,7 @@ export function CsvImportGuide({
             type="button"
             className="absolute inset-0 cursor-default"
             onClick={() => setOpen(false)}
-            aria-label="Fermer la documentation"
+            aria-label={copy.closeDocumentation}
           />
           <div
             role="dialog"
@@ -93,9 +97,9 @@ export function CsvImportGuide({
                     <FileSpreadsheet className="h-5 w-5" />
                   </span>
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">Documentation CSV</p>
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">{copy.eyebrow}</p>
                     <h2 id="csv-documentation-title" className="mt-1 text-xl font-bold tracking-tight sm:text-2xl">
-                      De votre banque à AskFinance
+                      {copy.title}
                     </h2>
                   </div>
                 </div>
@@ -103,39 +107,39 @@ export function CsvImportGuide({
                   type="button"
                   onClick={() => setOpen(false)}
                   className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted text-foreground transition-colors hover:bg-primary hover:text-primary-foreground"
-                  aria-label="Fermer la documentation"
-                  title="Fermer"
+                  aria-label={copy.closeDocumentation}
+                  title={copy.close}
                 >
                   <X className="h-5 w-5" />
                 </button>
               </div>
-              <DocumentationNavigation page={page} onChange={setPage} />
+              <DocumentationNavigation page={page} onChange={setPage} copy={copy} />
             </header>
 
             <div className="min-h-0 flex-1 overflow-y-auto bg-gradient-to-b from-muted/20 to-background">
               <div className="mx-auto w-full max-w-5xl px-5 py-7 sm:px-8 sm:py-9">
-                {page === 0 && <BankExportSection />}
-                {page === 1 && <CsvFormatSection onDownload={downloadTemplate} />}
-                {page === 2 && <AskFinanceImportSection />}
-                {page === 3 && <TroubleshootingSection />}
+                {page === 0 && <BankExportSection copy={copy} />}
+                {page === 1 && <CsvFormatSection onDownload={downloadTemplate} copy={copy} />}
+                {page === 2 && <AskFinanceImportSection copy={copy} />}
+                {page === 3 && <TroubleshootingSection copy={copy} />}
               </div>
             </div>
 
             <footer className="flex shrink-0 items-center justify-between gap-3 bg-background px-5 py-4 shadow-[0_-8px_24px_rgba(15,23,42,0.05)] sm:px-8">
-              <p className="hidden text-xs text-muted-foreground sm:block">Page {page + 1} sur 4</p>
+              <p className="hidden text-xs text-muted-foreground sm:block">{copy.page(page + 1)}</p>
               <div className="ml-auto flex gap-2">
                 {page > 0 && (
                   <Button type="button" variant="ghost" onClick={() => setPage((value) => value - 1)}>
-                    Précédent
+                    {copy.previous}
                   </Button>
                 )}
                 {page < 3 ? (
                   <Button type="button" onClick={() => setPage((value) => value + 1)}>
-                    Suivant <ArrowRight className="h-4 w-4" />
+                    {copy.next} <ArrowRight className="h-4 w-4" />
                   </Button>
                 ) : (
                   <Button type="button" onClick={() => setOpen(false)}>
-                    <Check className="h-4 w-4" /> J'ai compris
+                    <Check className="h-4 w-4" /> {copy.understood}
                   </Button>
                 )}
               </div>
@@ -162,17 +166,17 @@ export function CsvImportGuide({
           <div>
             <p className="text-sm font-semibold">
               {prominent
-                ? "Vous ne savez pas où récupérer le fichier ?"
-                : "Besoin d'aide pour votre CSV ?"}
+                ? copy.prominentTitle
+                : copy.helpTitle}
             </p>
             <p className="mt-1 text-xs leading-5 text-muted-foreground">
-              Export bancaire, format attendu, exemple et résolution des erreurs.
+              {copy.helpDescription}
             </p>
           </div>
         </div>
         <Button type="button" variant="outline" onClick={openGuide} className="shrink-0">
           <BookOpen className="h-4 w-4" />
-          Voir le guide d'import
+          {copy.openGuide}
         </Button>
       </div>
 
@@ -184,19 +188,21 @@ export function CsvImportGuide({
 function DocumentationNavigation({
   page,
   onChange,
+  copy,
 }: {
   page: number;
   onChange: (page: number) => void;
+  copy: CsvGuideCopy;
 }) {
   const items = [
-    { label: "Depuis la banque", icon: Landmark },
-    { label: "Préparer le CSV", icon: FileSpreadsheet },
-    { label: "Importer", icon: Upload },
-    { label: "Résoudre un problème", icon: AlertCircle },
+    { label: copy.nav[0], icon: Landmark },
+    { label: copy.nav[1], icon: FileSpreadsheet },
+    { label: copy.nav[2], icon: Upload },
+    { label: copy.nav[3], icon: AlertCircle },
   ];
 
   return (
-    <nav className="mt-5 grid grid-cols-4 gap-1 rounded-xl bg-muted/60 p-1" aria-label="Pages de la documentation">
+    <nav className="mt-5 grid grid-cols-4 gap-1 rounded-xl bg-muted/60 p-1" aria-label={copy.documentationPages}>
       {items.map((item, index) => {
         const Icon = item.icon;
         const active = page === index;
@@ -222,138 +228,129 @@ function DocumentationNavigation({
   );
 }
 
-function BankExportSection() {
+function BankExportSection({ copy }: { copy: CsvGuideCopy }) {
+  const instructionIcons = [<Monitor key="monitor" />, <Search key="search" />, <FileDown key="file" />, <Check key="check" />];
   return (
     <section>
-      <SectionTitle number="1" title="Récupérer le CSV depuis votre banque" subtitle="Le site web de la banque offre généralement plus d'options d'export que l'application mobile." />
+      <SectionTitle number="1" title={copy.bankTitle} subtitle={copy.bankSubtitle} />
       <div className="mt-5 grid gap-5 lg:grid-cols-[0.8fr_1.2fr]">
         <ol className="space-y-3">
-          <Instruction icon={<Monitor />} title="Connectez-vous à votre espace bancaire" text="Utilisez directement le site ou l'application officielle de votre banque." />
-          <Instruction icon={<Search />} title="Ouvrez le compte concerné" text="Affichez la liste des opérations, mouvements ou transactions." />
-          <Instruction icon={<FileDown />} title="Cherchez Exporter ou Télécharger" text="Le bouton peut aussi être nommé Export des opérations ou Relevé de compte." />
-          <Instruction icon={<Check />} title="Choisissez le format CSV" text="Sélectionnez la période souhaitée, puis validez le téléchargement." />
+          {copy.bankInstructions.map(([title, text], index) => (
+            <Instruction key={title} icon={instructionIcons[index]} title={title} text={text} />
+          ))}
         </ol>
-        <BankExportMockup />
+        <BankExportMockup copy={copy} />
       </div>
       <div className="mt-4 flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50/70 p-4 dark:border-amber-900/60 dark:bg-amber-950/20">
         <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
         <div>
-          <p className="text-sm font-semibold">Les intitulés changent selon les banques</p>
-          <p className="mt-1 text-sm leading-6 text-muted-foreground">
-            Si vous ne trouvez rien dans l'application mobile, essayez le site web sur ordinateur. Regardez près des filtres de date, du menu des opérations ou d'une icône de téléchargement.
-          </p>
+          <p className="text-sm font-semibold">{copy.bankWarningTitle}</p>
+          <p className="mt-1 text-sm leading-6 text-muted-foreground">{copy.bankWarningText}</p>
         </div>
       </div>
       <div className="mt-3 flex items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50/70 p-4 dark:border-emerald-900/60 dark:bg-emerald-950/20">
         <LockKeyhole className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600" />
         <div>
-          <p className="text-sm font-semibold">Vos accès restent privés</p>
-          <p className="mt-1 text-sm leading-6 text-muted-foreground">
-            Vous téléchargez vous-même le fichier puis vous l'envoyez à AskFinance. Ne communiquez jamais votre identifiant, votre mot de passe ou votre code de validation bancaire.
-          </p>
+          <p className="text-sm font-semibold">{copy.privacyTitle}</p>
+          <p className="mt-1 text-sm leading-6 text-muted-foreground">{copy.privacyText}</p>
         </div>
       </div>
     </section>
   );
 }
 
-function BankExportMockup() {
+function BankExportMockup({ copy }: { copy: CsvGuideCopy }) {
   return (
     <div className="overflow-hidden rounded-xl border bg-background shadow-sm">
       <div className="flex items-center gap-2 border-b bg-muted/50 px-4 py-3">
         <span className="h-2.5 w-2.5 rounded-full bg-red-400" />
         <span className="h-2.5 w-2.5 rounded-full bg-amber-400" />
         <span className="h-2.5 w-2.5 rounded-full bg-emerald-400" />
-        <span className="ml-2 text-xs font-medium text-muted-foreground">Espace bancaire</span>
+        <span className="ml-2 text-xs font-medium text-muted-foreground">{copy.bankArea}</span>
       </div>
       <div className="p-4 sm:p-5">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <p className="text-xs text-muted-foreground">Compte principal</p>
+            <p className="text-xs text-muted-foreground">{copy.mainAccount}</p>
             <p className="mt-1 text-xl font-bold">8 420,15 €</p>
           </div>
           <span className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground">
-            <Download className="h-3.5 w-3.5" /> Exporter
+            <Download className="h-3.5 w-3.5" /> {copy.export}
           </span>
         </div>
         <div className="mt-5 rounded-lg border p-3">
-          <p className="text-xs font-semibold">Exporter les opérations</p>
+          <p className="text-xs font-semibold">{copy.exportOperations}</p>
           <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
-            <div className="rounded-md border bg-muted/30 px-3 py-2"><span className="block text-muted-foreground">Période</span><strong className="mt-1 block">01/01 au 31/07</strong></div>
-            <div className="rounded-md border border-primary bg-primary/5 px-3 py-2"><span className="block text-muted-foreground">Format</span><strong className="mt-1 flex items-center gap-1 text-primary"><Check className="h-3 w-3" /> CSV</strong></div>
+            <div className="rounded-md border bg-muted/30 px-3 py-2"><span className="block text-muted-foreground">{copy.period}</span><strong className="mt-1 block">01/01 - 31/07</strong></div>
+            <div className="rounded-md border border-primary bg-primary/5 px-3 py-2"><span className="block text-muted-foreground">{copy.format}</span><strong className="mt-1 flex items-center gap-1 text-primary"><Check className="h-3 w-3" /> CSV</strong></div>
           </div>
-          <div className="mt-3 flex justify-end"><span className="rounded-md bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground">Télécharger</span></div>
+          <div className="mt-3 flex justify-end"><span className="rounded-md bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground">{copy.download}</span></div>
         </div>
-        <p className="mt-3 text-center text-[11px] text-muted-foreground">Illustration générique. L'interface réelle dépend de votre banque.</p>
+        <p className="mt-3 text-center text-[11px] text-muted-foreground">{copy.bankIllustration}</p>
       </div>
     </div>
   );
 }
 
-function CsvFormatSection({ onDownload }: { onDownload: () => void }) {
+function CsvFormatSection({ onDownload, copy }: { onDownload: () => void; copy: CsvGuideCopy }) {
   return (
     <section>
-      <SectionTitle number="2" title="Vérifier le format du fichier" subtitle="AskFinance reconnaît automatiquement les noms de colonnes les plus courants." />
+      <SectionTitle number="2" title={copy.formatTitle} subtitle={copy.formatSubtitle} />
       <div className="mt-5 grid gap-3 sm:grid-cols-3">
-        <RequiredColumn name="Date" aliases="Date opération, Date de valeur" example="01/07/2026" />
-        <RequiredColumn name="Libellé" aliases="Description, Intitulé, Merchant" example="Virement client" />
-        <RequiredColumn name="Montant" aliases="Amount ou colonnes Débit / Crédit" example="1250,00 ou -29,00" />
+        {copy.columns.map(([name, aliases, example]) => (
+          <RequiredColumn key={name} name={name} aliases={aliases} example={example} aliasLabel={copy.aliases} />
+        ))}
       </div>
       <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h3 className="text-sm font-semibold">Exemple compatible</h3>
-          <p className="mt-1 text-xs text-muted-foreground">Catégorie et Référence sont facultatives.</p>
+          <h3 className="text-sm font-semibold">{copy.compatibleExample}</h3>
+          <p className="mt-1 text-xs text-muted-foreground">{copy.optionalColumns}</p>
         </div>
         <Button type="button" variant="outline" onClick={onDownload}>
-          <Download className="h-4 w-4" /> Télécharger ce modèle CSV
+          <Download className="h-4 w-4" /> {copy.downloadTemplate}
         </Button>
       </div>
-      <ExampleTable />
+      <ExampleTable copy={copy} />
       <div className="mt-4 grid gap-3 sm:grid-cols-2">
-        <FormatNote title="Montant dans une seule colonne" text="Une dépense est négative, par exemple -29,00. Un revenu est positif, par exemple 1250,00." />
-        <FormatNote title="Débit et Crédit séparés" text="Les exports avec deux colonnes distinctes Débit et Crédit sont également acceptés." />
-        <FormatNote title="Dates acceptées" text="Utilisez JJ/MM/AAAA ou AAAA-MM-JJ. Les lignes avec une date illisible seront ignorées." />
-        <FormatNote title="Fichier accepté" text="CSV de 10 Mo maximum, séparé par virgule ou point-virgule, encodé en UTF-8 ou Latin-1." />
+        {copy.formatNotes.map(([title, text]) => <FormatNote key={title} title={title} text={text} />)}
       </div>
       <div className="mt-4 rounded-xl border bg-muted/30 p-4 text-sm leading-6 text-muted-foreground">
-        Votre banque fournit seulement un fichier XLS ou XLSX ? Ouvrez-le dans Excel, Google Sheets ou LibreOffice, puis utilisez <strong className="text-foreground">Enregistrer sous</strong> ou <strong className="text-foreground">Télécharger</strong> au format <strong className="text-foreground">CSV UTF-8</strong>.
+        {copy.spreadsheetHelp}
       </div>
     </section>
   );
 }
 
-function AskFinanceImportSection() {
+function AskFinanceImportSection({ copy }: { copy: CsvGuideCopy }) {
+  const icons = [<Landmark key="bank" />, <FileSpreadsheet key="file" />, <Upload key="upload" />];
   return (
     <section>
-      <SectionTitle number="3" title="Importer le fichier dans AskFinance" subtitle="Une fois le CSV téléchargé, revenez à la fenêtre d'import." />
+      <SectionTitle number="3" title={copy.importTitle} subtitle={copy.importSubtitle} />
       <div className="mt-5 grid gap-4 md:grid-cols-3">
-        <ImportStep number="1" title="Choisissez le compte" text="Sélectionnez le compte bancaire correspondant ou créez-le avec son solde initial." icon={<Landmark />} />
-        <ImportStep number="2" title="Choisissez le CSV" text="Cliquez sur Choisir un fichier, puis sélectionnez le document téléchargé depuis la banque." icon={<FileSpreadsheet />} />
-        <ImportStep number="3" title="Lancez l'import" text="AskFinance analyse les lignes, ajoute les nouvelles transactions et ignore les doublons déjà présents." icon={<Upload />} />
+        {copy.importSteps.map(([title, text], index) => (
+          <ImportStep key={title} number={String(index + 1)} title={title} text={text} icon={icons[index]} stepLabel={copy.stepLabel} />
+        ))}
       </div>
       <div className="mt-5 rounded-xl border border-primary/20 bg-primary/[0.04] p-5">
         <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-center">
           <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary"><Upload className="h-5 w-5" /></span>
           <div className="flex-1">
-            <p className="font-semibold">Dans la fenêtre où vous étiez juste avant</p>
-            <p className="mt-1 text-sm text-muted-foreground">Fermez ce guide, choisissez votre fichier dans la zone prévue, puis cliquez sur Importer.</p>
+            <p className="font-semibold">{copy.importWhereTitle}</p>
+            <p className="mt-1 text-sm text-muted-foreground">{copy.importWhereText}</p>
           </div>
-          <span className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground">Choisir un fichier <ArrowRight className="h-4 w-4" /></span>
+          <span className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground">{copy.chooseFile} <ArrowRight className="h-4 w-4" /></span>
         </div>
       </div>
     </section>
   );
 }
 
-function TroubleshootingSection() {
+function TroubleshootingSection({ copy }: { copy: CsvGuideCopy }) {
   return (
     <section>
-      <SectionTitle number="4" title="Si l'import ne fonctionne pas" subtitle="Les causes les plus fréquentes se corrigent directement dans le fichier." />
+      <SectionTitle number="4" title={copy.troubleTitle} subtitle={copy.troubleSubtitle} />
       <div className="mt-5 grid gap-3 sm:grid-cols-2">
-        <Trouble title="Colonnes manquantes" solution="Vérifiez que la première ligne contient une Date, un Libellé et un Montant, ou bien Débit et Crédit." />
-        <Trouble title="Aucune transaction importée" solution="Vérifiez les dates, les montants et les libellés. Une ligne incomplète ou illisible est ignorée." />
-        <Trouble title="Aucune nouvelle transaction" solution="Le fichier a probablement déjà été importé. AskFinance ignore les doublons sans effacer l'existant." />
-        <Trouble title="Fichier refusé" solution="Convertissez le PDF, XLS ou XLSX en CSV UTF-8 et vérifiez que sa taille ne dépasse pas 10 Mo." />
+        {copy.troubles.map(([title, solution]) => <Trouble key={title} title={title} solution={solution} />)}
       </div>
     </section>
   );
@@ -380,24 +377,27 @@ function Instruction({ icon, title, text }: { icon: React.ReactNode; title: stri
   );
 }
 
-function RequiredColumn({ name, aliases, example }: { name: string; aliases: string; example: string }) {
+function RequiredColumn({ name, aliases, example, aliasLabel }: { name: string; aliases: string; example: string; aliasLabel: string }) {
   return (
     <div className="rounded-xl border bg-background p-4">
       <div className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-emerald-600" /><p className="text-sm font-semibold">{name}</p></div>
-      <p className="mt-2 text-xs leading-5 text-muted-foreground">Alias : {aliases}</p>
+      <p className="mt-2 text-xs leading-5 text-muted-foreground">{aliasLabel}: {aliases}</p>
       <p className="mt-2 rounded-md bg-muted px-2 py-1.5 font-mono text-xs">{example}</p>
     </div>
   );
 }
 
-function ExampleTable() {
+function ExampleTable({ copy }: { copy: CsvGuideCopy }) {
   return (
     <div className="mt-3 overflow-x-auto rounded-xl border bg-background">
       <table className="w-full min-w-[620px] text-left text-xs">
-        <thead className="border-b bg-muted/50 text-muted-foreground"><tr><th className="px-3 py-2.5 font-medium">Date</th><th className="px-3 py-2.5 font-medium">Libellé</th><th className="px-3 py-2.5 font-medium">Montant</th><th className="px-3 py-2.5 font-medium">Catégorie</th><th className="px-3 py-2.5 font-medium">Référence</th></tr></thead>
+        <thead className="border-b bg-muted/50 text-muted-foreground"><tr>{copy.tableHeaders.map((header) => <th key={header} className="px-3 py-2.5 font-medium">{header}</th>)}</tr></thead>
         <tbody>
-          <tr className="border-b"><td className="px-3 py-2.5">01/07/2026</td><td className="px-3 py-2.5">Virement client</td><td className="px-3 py-2.5 font-semibold text-emerald-600">1 250,00</td><td className="px-3 py-2.5">Ventes</td><td className="px-3 py-2.5">FAC-104</td></tr>
-          <tr><td className="px-3 py-2.5">02/07/2026</td><td className="px-3 py-2.5">Hébergement</td><td className="px-3 py-2.5 font-semibold text-red-600">-29,00</td><td className="px-3 py-2.5">Logiciels</td><td className="px-3 py-2.5">VERCEL-JUILLET</td></tr>
+          {copy.tableRows.map((row, rowIndex) => (
+            <tr key={row.join("-")} className={rowIndex === 0 ? "border-b" : undefined}>
+              {row.map((cell, cellIndex) => <td key={`${cell}-${cellIndex}`} className={cn("px-3 py-2.5", cellIndex === 2 && "font-semibold", cellIndex === 2 && (rowIndex === 0 ? "text-emerald-600" : "text-red-600"))}>{cell}</td>)}
+            </tr>
+          ))}
         </tbody>
       </table>
     </div>
@@ -408,10 +408,10 @@ function FormatNote({ title, text }: { title: string; text: string }) {
   return <div className="rounded-lg border p-3"><p className="text-xs font-semibold">{title}</p><p className="mt-1 text-xs leading-5 text-muted-foreground">{text}</p></div>;
 }
 
-function ImportStep({ number, title, text, icon }: { number: string; title: string; text: string; icon: React.ReactNode }) {
+function ImportStep({ number, title, text, icon, stepLabel }: { number: string; title: string; text: string; icon: React.ReactNode; stepLabel: string }) {
   return (
     <div className="rounded-xl border p-4">
-      <div className="flex items-center justify-between"><span className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary [&_svg]:h-4 [&_svg]:w-4">{icon}</span><span className="text-xs font-bold text-muted-foreground">ÉTAPE {number}</span></div>
+      <div className="flex items-center justify-between"><span className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary [&_svg]:h-4 [&_svg]:w-4">{icon}</span><span className="text-xs font-bold text-muted-foreground">{stepLabel} {number}</span></div>
       <p className="mt-4 text-sm font-semibold">{title}</p><p className="mt-1 text-xs leading-5 text-muted-foreground">{text}</p>
     </div>
   );

@@ -9,13 +9,8 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { approveMember, changeMemberRole, removeMember } from "@/lib/actions/workspaces";
 import type { MembersView } from "@/lib/data/workspace";
-
-const ROLE_LABEL: Record<string, string> = {
-  owner: "Propriétaire",
-  admin: "Admin",
-  member: "Membre",
-  viewer: "Lecteur",
-};
+import { useI18n } from "@/lib/i18n/client";
+import { dashboardCopy } from "@/lib/i18n/dashboard";
 
 // Même hiérarchie que côté serveur : on n'agit que sur un rang strictement inférieur.
 const ROLE_RANK: Record<string, number> = { owner: 3, admin: 2, member: 1, viewer: 0 };
@@ -29,6 +24,9 @@ export function MembersPanel({
   workspaceId: string;
 }) {
   const router = useRouter();
+  const { locale } = useI18n();
+  const copy = dashboardCopy[locale].members;
+  const roleLabels: Record<string, string> = { owner: copy.owner, admin: copy.admin, member: copy.member, viewer: copy.viewer };
   const [busy, setBusy] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
@@ -51,7 +49,7 @@ export function MembersPanel({
       await fn();
       router.refresh();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Action impossible.");
+      toast.error(e instanceof Error ? e.message : copy.actionFailed);
     } finally {
       setBusy(null);
     }
@@ -75,10 +73,9 @@ export function MembersPanel({
     <div className="space-y-6">
       {view.joinCode && (
         <Card className="p-5">
-          <h2 className="text-sm font-semibold">Inviter quelqu'un</h2>
+          <h2 className="text-sm font-semibold">{copy.invite}</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Partagez ce lien. La personne arrive directement sur la demande
-            d'accès, puis vous validez son arrivée ci-dessous.
+            {copy.inviteDesc}
           </p>
           <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
             <code className="min-w-0 flex-1 truncate rounded-md border bg-muted/50 px-3 py-2 font-mono text-sm">
@@ -90,24 +87,24 @@ export function MembersPanel({
               ) : (
                 <Link2 className="h-4 w-4" />
               )}
-              {copiedLink ? "Lien copié" : "Copier le lien"}
+              {copiedLink ? copy.linkCopiedShort : copy.copyLink}
             </Button>
           </div>
           <div className="mt-2 flex items-center gap-2">
-            <span className="text-xs text-muted-foreground">Code :</span>
+            <span className="text-xs text-muted-foreground">{copy.code}</span>
             <code className="rounded-md border bg-muted/40 px-2 py-1 font-mono text-xs tracking-widest">
               {view.joinCode}
             </code>
             <Button variant="ghost" size="sm" onClick={copyCode}>
               {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-              {copied ? "Copié" : "Copier"}
+              {copied ? copy.copied : copy.copy}
             </Button>
           </div>
         </Card>
       )}
 
       <Card className="p-5">
-        <h2 className="text-sm font-semibold">Membres ({activeCount})</h2>
+        <h2 className="text-sm font-semibold">{copy.members} ({activeCount})</h2>
         <ul className="mt-3 divide-y">
           {view.members.map((m) => {
             const isSelf = m.userId === view.currentUserId;
@@ -120,7 +117,7 @@ export function MembersPanel({
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium">
                     {m.name}
-                    {isSelf && <span className="text-muted-foreground"> (vous)</span>}
+                    {isSelf && <span className="text-muted-foreground"> {copy.you}</span>}
                   </p>
                   <p
                     className={
@@ -130,8 +127,8 @@ export function MembersPanel({
                     }
                   >
                     {pending
-                      ? "En attente de validation"
-                      : ROLE_LABEL[m.role] ?? m.role}
+                      ? copy.pending
+                      : roleLabels[m.role] ?? m.role}
                   </p>
                 </div>
 
@@ -150,8 +147,8 @@ export function MembersPanel({
                     ) : (
                       <ShieldCheck className="h-4 w-4" />
                     )}
-                    Valider
-                  </Button><Button variant="ghost" size="sm" disabled={busy !== null} onClick={() => run(`rm-${m.userId}`, () => removeMember({ workspaceId, userId: m.userId }))}>Refuser</Button></div>
+                    {copy.approve}
+                  </Button><Button variant="ghost" size="sm" disabled={busy !== null} onClick={() => run(`rm-${m.userId}`, () => removeMember({ workspaceId, userId: m.userId }))}>{copy.reject}</Button></div>
                 )}
 
                 {canManage && !pending && !isSelf && rank(m.role) < rank(view.callerRole) && (
@@ -162,9 +159,9 @@ export function MembersPanel({
                     onChange={(event) => run(`role-${m.userId}`, () => changeMemberRole({ workspaceId, userId: m.userId, role: event.target.value as "admin" | "member" | "viewer" }))}
                     className="h-8 rounded-md border bg-background px-2 text-xs"
                   >
-                    {view.callerRole === "owner" && <option value="admin">Admin</option>}
-                    <option value="member">Membre</option>
-                    <option value="viewer">Lecteur</option>
+                    {view.callerRole === "owner" && <option value="admin">{copy.admin}</option>}
+                    <option value="member">{copy.member}</option>
+                    <option value="viewer">{copy.viewer}</option>
                   </select>
                   <Button
                     variant="ghost"
@@ -176,7 +173,7 @@ export function MembersPanel({
                         removeMember({ workspaceId, userId: m.userId })
                       )
                     }
-                    aria-label="Retirer ce membre"
+                    aria-label={copy.remove}
                   >
                     {busy === `rm-${m.userId}` ? (
                       <Loader2 className="h-4 w-4 animate-spin" />

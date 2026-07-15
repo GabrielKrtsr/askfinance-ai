@@ -7,6 +7,15 @@ from dotenv import load_dotenv
 
 load_dotenv()  # charge .env avant d'importer les services
 
+# Le Python distribué hors Microsoft Store s'appuie parfois sur le bundle CA de
+# certifi, qui ne connaît pas les certificats racine ajoutés à Windows (antivirus,
+# proxy local, environnement d'entreprise). HTTPX/Supabase doit utiliser le
+# magasin de certificats Windows pour éviter un CERTIFICATE_VERIFY_FAILED local.
+if os.name == "nt":
+    import truststore
+
+    truststore.inject_into_ssl()
+
 # Échec immédiat et explicite si la config indispensable manque (plutôt qu'un
 # 500 opaque à la première requête).
 _REQUIRED_ENV = ("SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY")

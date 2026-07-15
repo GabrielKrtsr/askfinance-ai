@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from datetime import date
 
 import pandas as pd
 from sklearn.linear_model import LinearRegression
@@ -92,6 +93,7 @@ def build_forecast(
     opening_balance: float = 0.0,
     tax_deadlines: list[dict] | None = None,
     expected_inflows: list[dict] | None = None,
+    today: date | None = None,
 ) -> dict:
     if not transactions:
         return _empty()
@@ -118,8 +120,8 @@ def build_forecast(
     # La projection démarre AUJOURD'HUI (pas à la dernière transaction) : si les
     # données ont du retard, « 90 jours » et « alerte 30 jours » restent ancrés
     # sur le présent au lieu de décrire une fenêtre déjà passée.
-    today = pd.Timestamp.today().normalize()
-    start = max(last_date + pd.Timedelta(days=1), today)
+    today_timestamp = pd.Timestamp(today or date.today()).normalize()
+    start = max(last_date + pd.Timedelta(days=1), today_timestamp)
     end = start + pd.Timedelta(days=HORIZON - 1)
     future_dates = pd.date_range(start, end)
 

@@ -1,25 +1,26 @@
 """Endpoints du copilote IA Gemini."""
 from __future__ import annotations
 
-import json
 import time
 from collections import defaultdict
 from threading import Lock
 
 from fastapi import APIRouter, Header, HTTPException
-from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from controller.deps import require_member
 from services.ai.gemini_client import GeminiCallError, GeminiConfigurationError
-from services.ai.orchestrator import answer_financial_question, stream_financial_answer
+from services.ai.language import normalize_language
+from services.ai.orchestrator import answer_financial_question
 from services.ai.personas import PERSONAS
 from services.supabase_service import (
     conversation_belongs_to_user,
     create_conversation,
+    fetch_pending_action,
     fetch_recent_messages,
     insert_message,
     get_workspace_type,
+    set_pending_action,
 )
 
 router = APIRouter()
@@ -53,6 +54,7 @@ class ChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=2000)
     advisor: str = "daf"
     conversation_id: str | None = None
+    language: str = Field(default="fr", pattern="^(fr|en|uk)$")
 
 
 def _title_from(message: str) -> str:
@@ -76,10 +78,6 @@ def _resolve_conversation(
     return conversation["id"]
 
 
-def _sse(event: str, data: dict) -> str:
-    return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
-
-
 @router.get("/advisors")
 def list_advisors():
     return {
@@ -100,22 +98,32 @@ def chat(
     authorization: str = Header(default=""),
     x_workspace_id: str = Header(default=""),
 ):
-    """Réponse complète (non-streaming), utilisée si le front ne gère pas le SSE."""
+    """Réponse complète. Le frontend anime ensuite localement son affichage."""
     user_id, workspace_id = require_member(authorization, x_workspace_id)
     workspace_type = get_workspace_type(workspace_id)
     if workspace_type == "group":
         raise HTTPException(status_code=400, detail="Yassia n'est pas encore disponible dans les espaces de groupe.")
     _check_rate_limit(user_id)
     message = payload.message.strip()
+    language = normalize_language(payload.language)
 
     conversation_id = _resolve_conversation(
         workspace_id, user_id, message, payload.conversation_id
     )
     history = fetch_recent_messages(conversation_id, HISTORY_WINDOW)
+    pending_action = fetch_pending_action(conversation_id, user_id, workspace_id)
     insert_message(conversation_id, user_id, "user", message)
 
     try:
-        result = answer_financial_question(workspace_id, message, payload.advisor, history, workspace_type)
+        result = answer_financial_question(
+            workspace_id,
+            message,
+            payload.advisor,
+            history,
+            workspace_type,
+            pending_action=pending_action,
+            language=language,
+        )
     except GeminiConfigurationError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except GeminiCallError as exc:
@@ -126,57 +134,10 @@ def chat(
         ) from exc
 
     insert_message(conversation_id, user_id, "assistant", result["answer"])
+    set_pending_action(
+        conversation_id,
+        user_id,
+        workspace_id,
+        result.pop("pending_action", None),
+    )
     return {**result, "conversation_id": conversation_id}
-
-
-@router.post("/chat/stream")
-def chat_stream(
-    payload: ChatRequest,
-    authorization: str = Header(default=""),
-    x_workspace_id: str = Header(default=""),
-):
-    """Réponse en streaming (SSE) : étapes en cours + texte token-par-token."""
-    user_id, workspace_id = require_member(authorization, x_workspace_id)
-    workspace_type = get_workspace_type(workspace_id)
-    if workspace_type == "group":
-        raise HTTPException(status_code=400, detail="Yassia n'est pas encore disponible dans les espaces de groupe.")
-    _check_rate_limit(user_id)
-    message = payload.message.strip()
-
-    conversation_id = _resolve_conversation(
-        workspace_id, user_id, message, payload.conversation_id
-    )
-    history = fetch_recent_messages(conversation_id, HISTORY_WINDOW)
-    insert_message(conversation_id, user_id, "user", message)
-
-    def event_stream():
-        yield _sse("meta", {"conversation_id": conversation_id})
-        parts: list[str] = []
-        try:
-            for event in stream_financial_answer(workspace_id, message, payload.advisor, history, workspace_type):
-                kind = event["kind"]
-                if kind == "step":
-                    yield _sse("step", {"label": event["label"]})
-                elif kind == "token":
-                    parts.append(event["text"])
-                    yield _sse("token", {"text": event["text"]})
-                elif kind == "error":
-                    yield _sse("error", {"message": event["message"]})
-        except Exception as exc:  # noqa: BLE001, on protège le flux quoi qu'il arrive
-            print(f"[ai] stream echec: {exc}", flush=True)
-            yield _sse("error", {"message": "Erreur interne du copilote."})
-
-        answer = "".join(parts).strip()
-        if answer:
-            insert_message(conversation_id, user_id, "assistant", answer)
-        yield _sse("done", {})
-
-    return StreamingResponse(
-        event_stream(),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "X-Accel-Buffering": "no",  # désactive le buffering (proxys/uvicorn)
-            "Connection": "keep-alive",
-        },
-    )

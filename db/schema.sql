@@ -306,6 +306,7 @@ create table conversations (
   workspace_id uuid not null references workspaces(id) on delete cascade,
   user_id      uuid references auth.users(id) on delete set null,
   title        text,
+  pending_action jsonb,
   created_at   timestamptz not null default now(),
   updated_at   timestamptz not null default now()
 );
@@ -330,6 +331,18 @@ create trigger trg_conversations_updated  before update on conversations  for ea
 create trigger trg_category_rules_updated before update on transaction_category_rules for each row execute function set_updated_at();
 create trigger trg_alert_states_updated before update on financial_alert_states for each row execute function set_updated_at();
 create trigger trg_workflow_items_updated before update on workflow_items for each row execute function set_updated_at();
+
+create or replace function touch_conversation()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  update conversations set updated_at = now() where id = new.conversation_id;
+  return new;
+end;
+$$;
+
+create trigger trg_touch_conversation
+  after insert on messages
+  for each row execute function touch_conversation();
 
 -- =============================================================================
 -- INDEX (clés étrangères les plus sollicitées en lecture)

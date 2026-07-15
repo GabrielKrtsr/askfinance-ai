@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type DragEvent } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
@@ -21,6 +21,7 @@ import {
 
 import { Logo } from "@/components/logo";
 import { CsvImportGuide } from "@/components/dashboard/csv-import-guide";
+import { PublicPreferences } from "@/components/landing/public-preferences";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -33,9 +34,32 @@ import {
 } from "@/lib/actions/workspaces";
 import { createAccount } from "@/lib/services/accounts";
 import { importTransactionsFromCsv } from "@/lib/services/import-transactions";
+import { useI18n } from "@/lib/i18n/client";
+import { onboardingCopy, type OnboardingCopy } from "@/lib/i18n/onboarding";
+import { publicCommon } from "@/lib/i18n/public";
 import { cn } from "@/lib/utils";
 
 type WorkspaceKind = "personal" | "business" | "group";
+const MAX_FILE_SIZE = 10 * 1024 * 1024;
+
+function formatFileSize(
+  size: number,
+  locale: "fr" | "en" | "uk",
+  units: OnboardingCopy["units"]
+) {
+  if (size < 1024) return `${size} ${units.bytes}`;
+  if (size < 1024 * 1024) return `${Math.round(size / 1024)} ${units.kilobytes}`;
+  return `${new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(size / (1024 * 1024))} ${units.megabytes}`;
+}
+
+function localizedError(
+  error: unknown,
+  fallback: string,
+  locale: "fr" | "en" | "uk"
+) {
+  return locale === "fr" && error instanceof Error ? error.message : fallback;
+}
+
 type Step =
   | "loading"
   | "type"
@@ -51,7 +75,13 @@ type Step =
 
 export default function OnboardingPage() {
   const router = useRouter();
+  const { locale } = useI18n();
+  const copy = onboardingCopy[locale];
+  const common = publicCommon[locale];
+  const copyRef = useRef(copy);
+  const localeRef = useRef(locale);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const dragDepthRef = useRef(0);
   const [step, setStep] = useState<Step>("loading");
   const [workspaceId, setWorkspaceId] = useState("");
   const [workspaceType, setWorkspaceType] = useState<WorkspaceKind | null>(null);
@@ -63,9 +93,15 @@ export default function OnboardingPage() {
   const [openingBalance, setOpeningBalance] = useState("");
   const [accountId, setAccountId] = useState("");
   const [file, setFile] = useState<File | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    copyRef.current = copy;
+    localeRef.current = locale;
+  }, [copy, locale]);
 
   useEffect(() => {
     let active = true;
@@ -117,7 +153,7 @@ export default function OnboardingPage() {
         }
       } catch (e) {
         if (!active) return;
-        setError(e instanceof Error ? e.message : "Impossible de reprendre la configuration.");
+        setError(localizedError(e, copyRef.current.resumeFailed, localeRef.current));
         setStep("type");
       }
     }
@@ -143,7 +179,7 @@ export default function OnboardingPage() {
       setWorkspaceName(name.trim());
       setStep(type === "group" ? "groupReady" : "account");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Une erreur est survenue.");
+      setError(localizedError(e, copy.genericError, locale));
     } finally {
       setLoading(false);
     }
@@ -154,18 +190,18 @@ export default function OnboardingPage() {
     setError(null);
     const normalized = Number(openingBalance.trim().replace(",", ".") || "0");
     if (!Number.isFinite(normalized)) {
-      setError("Le solde initial doit être un nombre valide.");
+      setError(copy.invalidBalance);
       setLoading(false);
       return;
     }
 
     try {
       const account = await createAccount(accountName.trim(), normalized);
-      if (!account) throw new Error("Création du compte impossible.");
+      if (!account) throw new Error(copy.accountCreationFailed);
       setAccountId(account.id);
       setStep("import");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Création du compte impossible.");
+      setError(localizedError(e, copy.accountCreationFailed, locale));
     } finally {
       setLoading(false);
     }
@@ -180,7 +216,7 @@ export default function OnboardingPage() {
       router.push(workspaceType === "group" ? "/dashboard/shared" : "/dashboard");
       router.refresh();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Impossible de terminer la configuration.");
+      setError(localizedError(e, copy.finishFailed, locale));
       setLoading(false);
     }
   }
@@ -196,18 +232,71 @@ export default function OnboardingPage() {
         throw new Error(
           result.errors[0] ??
             (result.duplicates > 0
-              ? "Ce relevé ne contient aucune nouvelle transaction."
-              : "Aucune transaction exploitable n'a été trouvée.")
+              ? copy.noNewTransaction
+              : copy.noUsableTransaction)
         );
       }
       await setOnboardingStatus(workspaceId, "completed");
       router.push("/dashboard");
       router.refresh();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Import impossible.");
+      setError(localizedError(e, copy.importFailed, locale));
       setLoading(false);
       setProgress(0);
     }
+  }
+
+  function selectImportFile(candidate: File | null) {
+    if (!candidate) return;
+
+    const isCsv =
+      candidate.name.toLowerCase().endsWith(".csv") ||
+      candidate.type === "text/csv" ||
+      candidate.type === "application/vnd.ms-excel";
+
+    if (!isCsv) {
+      setFile(null);
+      setError(copy.csvRequired);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
+
+    if (candidate.size > MAX_FILE_SIZE) {
+      setFile(null);
+      setError(copy.fileTooLarge);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
+
+    setError(null);
+    setFile(candidate);
+  }
+
+  function handleDragEnter(event: DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    if (loading) return;
+    dragDepthRef.current += 1;
+    setIsDragging(true);
+  }
+
+  function handleDragLeave(event: DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    if (loading) return;
+    dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
+    if (dragDepthRef.current === 0) setIsDragging(false);
+  }
+
+  function handleDragOver(event: DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    if (!loading) event.dataTransfer.dropEffect = "copy";
+  }
+
+  function handleDrop(event: DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    dragDepthRef.current = 0;
+    setIsDragging(false);
+    if (loading) return;
+    selectImportFile(event.dataTransfer.files?.[0] ?? null);
   }
 
   async function handleJoin() {
@@ -223,7 +312,7 @@ export default function OnboardingPage() {
         setStep("pending");
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Code invalide.");
+      setError(localizedError(e, copy.invalidCode, locale));
     } finally {
       setLoading(false);
     }
@@ -237,84 +326,87 @@ export default function OnboardingPage() {
       <header className="border-b bg-background/90 backdrop-blur">
         <div className="mx-auto flex h-16 max-w-5xl items-center justify-between px-4 sm:px-6">
           <Logo />
-          {workspaceId && !["pending", "groupReady"].includes(step) && (
-            <button
-              type="button"
-              onClick={() => finish("skipped")}
-              disabled={loading}
-              className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
-            >
-              Configurer plus tard
-            </button>
-          )}
+          <div className="flex items-center gap-3">
+            {workspaceId && !["pending", "groupReady"].includes(step) && (
+              <button
+                type="button"
+                onClick={() => finish("skipped")}
+                disabled={loading}
+                className="hidden text-sm font-medium text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50 sm:block"
+              >
+                {copy.later}
+              </button>
+            )}
+            <PublicPreferences labels={{ language: common.language, light: common.light, dark: common.dark }} />
+          </div>
         </div>
       </header>
 
       <main className="mx-auto flex min-h-[calc(100vh-4rem)] w-full max-w-5xl items-center px-4 py-10 sm:px-6">
         <div className="w-full">
           {workspaceId && ["account", "import", "groupReady"].includes(step) && (
-            <ProgressHeader current={setupStep} total={setupTotal} workspaceName={workspaceName} />
+            <ProgressHeader current={setupStep} total={setupTotal} workspaceName={workspaceName} copy={copy} />
           )}
 
           {step === "loading" && (
             <div className="flex items-center justify-center py-24 text-muted-foreground">
               <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-              Préparation de votre espace
+              {copy.loading}
             </div>
           )}
 
           {step === "type" && (
             <section className="animate-fade-in">
               <div className="max-w-2xl">
-                <p className="text-sm font-semibold uppercase tracking-[0.18em] text-primary">Bienvenue sur AskFinance</p>
-                <h1 className="mt-3 text-3xl font-bold tracking-tight sm:text-4xl">Quel espace voulez-vous préparer ?</h1>
-                <p className="mt-3 text-muted-foreground">Votre choix adapte le vocabulaire, les outils et le tableau de bord. Vous pourrez créer d'autres espaces plus tard.</p>
+                <p className="text-sm font-semibold uppercase tracking-[0.18em] text-primary">{copy.welcome}</p>
+                <h1 className="mt-3 text-3xl font-bold tracking-tight sm:text-4xl">{copy.chooseSpace}</h1>
+                <p className="mt-3 text-muted-foreground">{copy.chooseSpaceDescription}</p>
               </div>
               <div className="mt-8 grid gap-4 md:grid-cols-3">
-                <ChoiceCard icon={<User className="h-6 w-6" />} eyebrow="B2C Solo" title="Mes finances" description="Budget, dépenses, revenus et reste à vivre dans un espace personnel." onClick={() => go("personal")} />
-                <ChoiceCard icon={<Users className="h-6 w-6" />} eyebrow="B2C Groupe" title="Un groupe ou foyer" description="Dépenses partagées, parts personnalisées et règlements entre membres." onClick={() => go("group")} />
-                <ChoiceCard icon={<Building2 className="h-6 w-6" />} eyebrow="B2B Entreprise" title="Une entreprise" description="Trésorerie, encaissements, fiscalité, workflows et équipe." onClick={() => go("proChoice")} />
+                <ChoiceCard icon={<User className="h-6 w-6" />} eyebrow={copy.personalEyebrow} title={copy.personalTitle} description={copy.personalDescription} choose={copy.choose} onClick={() => go("personal")} />
+                <ChoiceCard icon={<Users className="h-6 w-6" />} eyebrow={copy.groupEyebrow} title={copy.groupTitle} description={copy.groupDescription} choose={copy.choose} onClick={() => go("group")} />
+                <ChoiceCard icon={<Building2 className="h-6 w-6" />} eyebrow={copy.businessEyebrow} title={copy.businessTitle} description={copy.businessDescription} choose={copy.choose} onClick={() => go("proChoice")} />
               </div>
               <button type="button" onClick={() => go("join")} className="mt-6 inline-flex items-center gap-2 text-sm font-medium text-muted-foreground transition-colors hover:text-primary">
-                <KeyRound className="h-4 w-4" /> J'ai un code d'invitation
+                <KeyRound className="h-4 w-4" /> {copy.invitationCode}
               </button>
               {error && <ErrorMessage>{error}</ErrorMessage>}
             </section>
           )}
 
           {step === "personal" && (
-            <NameCard title="Nommez votre espace personnel" description="Un nom simple pour le reconnaître dans le sélecteur d'espaces." label="Nom de l'espace" placeholder="Mon budget" value={name} onChange={setName} onBack={() => go("type")} onSubmit={() => handleCreate("personal")} loading={loading} error={error} />
+            <NameCard title={copy.personalNameTitle} description={copy.personalNameDescription} label={copy.workspaceName} placeholder={copy.personalPlaceholder} value={name} onChange={setName} onBack={() => go("type")} onSubmit={() => handleCreate("personal")} loading={loading} error={error} copy={copy} />
           )}
 
           {step === "group" && (
-            <NameCard title="Nommez votre groupe" description="Pour un couple, une famille, une colocation ou un projet commun." label="Nom du groupe" placeholder="Maison" value={name} onChange={setName} onBack={() => go("type")} onSubmit={() => handleCreate("group")} loading={loading} error={error} />
+            <NameCard title={copy.groupNameTitle} description={copy.groupNameDescription} label={copy.groupName} placeholder={copy.groupPlaceholder} value={name} onChange={setName} onBack={() => go("type")} onSubmit={() => handleCreate("group")} loading={loading} error={error} copy={copy} />
           )}
 
           {step === "proChoice" && (
             <section className="animate-fade-in">
-              <BackButton onClick={() => go("type")} />
-              <h1 className="mt-5 text-3xl font-bold tracking-tight">Votre entreprise</h1>
-              <p className="mt-2 text-muted-foreground">Créez un nouvel espace ou rejoignez une équipe existante.</p>
+              <BackButton onClick={() => go("type")} label={copy.back} />
+              <h1 className="mt-5 text-3xl font-bold tracking-tight">{copy.companyTitle}</h1>
+              <p className="mt-2 text-muted-foreground">{copy.companyDescription}</p>
               <div className="mt-7 grid gap-4 sm:grid-cols-2">
-                <ChoiceCard icon={<Plus className="h-6 w-6" />} eyebrow="Nouvel espace" title="Créer mon entreprise" description="Vous devenez propriétaire de l'espace et pourrez inviter votre équipe." onClick={() => go("business")} />
-                <ChoiceCard icon={<KeyRound className="h-6 w-6" />} eyebrow="Invitation" title="Rejoindre une entreprise" description="Utilisez le code transmis par un responsable de l'espace." onClick={() => go("join")} />
+                <ChoiceCard icon={<Plus className="h-6 w-6" />} eyebrow={copy.newSpace} title={copy.createCompany} description={copy.createCompanyDescription} choose={copy.choose} onClick={() => go("business")} />
+                <ChoiceCard icon={<KeyRound className="h-6 w-6" />} eyebrow={copy.invitation} title={copy.joinCompany} description={copy.joinCompanyDescription} choose={copy.choose} onClick={() => go("join")} />
               </div>
             </section>
           )}
 
           {step === "business" && (
-            <NameCard title="Créez votre espace entreprise" description="Utilisez le nom commercial que vous reconnaissez immédiatement." label="Nom de l'entreprise" placeholder="Mon entreprise" value={name} onChange={setName} onBack={() => go("proChoice")} onSubmit={() => handleCreate("business")} loading={loading} error={error} />
+            <NameCard title={copy.companyNameTitle} description={copy.companyNameDescription} label={copy.companyName} placeholder={copy.companyPlaceholder} value={name} onChange={setName} onBack={() => go("proChoice")} onSubmit={() => handleCreate("business")} loading={loading} error={error} copy={copy} />
           )}
 
           {step === "account" && (
-            <SetupCard icon={<Landmark className="h-6 w-6" />} title="Ajoutez votre premier compte" description="Le solde initial sert de point de départ avant l'ajout des mouvements du relevé.">
+            <SetupCard icon={<Landmark className="h-6 w-6" />} title={copy.accountTitle} description={copy.accountDescription}>
               <div className="grid gap-5 sm:grid-cols-2">
                 <div className="space-y-2">
-                  <Label htmlFor="account-name">Nom du compte</Label>
-                  <Input id="account-name" autoFocus placeholder="Compte principal" value={accountName} onChange={(event) => setAccountName(event.target.value)} />
+                  <Label htmlFor="account-name">{copy.accountName}</Label>
+                  <Input id="account-name" autoFocus placeholder={copy.accountPlaceholder} value={accountName} onChange={(event) => setAccountName(event.target.value)} />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="opening-balance">Solde avant le premier relevé</Label>
+                  <Label htmlFor="opening-balance">{copy.openingBalance}</Label>
                   <div className="relative">
                     <Input id="opening-balance" inputMode="decimal" placeholder="0,00" value={openingBalance} onChange={(event) => setOpeningBalance(event.target.value)} className="pr-10" />
                     <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">€</span>
@@ -323,70 +415,90 @@ export default function OnboardingPage() {
               </div>
               <div className="mt-4 flex items-start gap-2 rounded-lg bg-muted/60 p-3 text-sm text-muted-foreground">
                 <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-teal" />
-                Vous pourrez ajouter d'autres comptes et corriger ce solde depuis votre espace.
+                {copy.accountHint}
               </div>
               {error && <ErrorMessage>{error}</ErrorMessage>}
               <Button size="lg" className="mt-6 w-full sm:w-auto" disabled={loading || !accountName.trim()} onClick={handleCreateAccount}>
                 {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
-                Continuer vers l'import
+                {copy.continueImport}
               </Button>
             </SetupCard>
           )}
 
           {step === "import" && (
-            <SetupCard icon={<FileSpreadsheet className="h-6 w-6" />} title="Importez votre premier relevé" description={`Les transactions seront ajoutées à ${accountName || "votre compte"}. L'import CSV reste facultatif.`}>
-              <input ref={fileInputRef} type="file" accept=".csv,text/csv" className="hidden" onChange={(event) => setFile(event.target.files?.[0] ?? null)} />
-              <button type="button" onClick={() => fileInputRef.current?.click()} className={cn("flex min-h-40 w-full flex-col items-center justify-center rounded-xl border-2 border-dashed p-6 text-center transition-colors", file ? "border-primary/60 bg-primary/5" : "border-border hover:border-primary/40 hover:bg-muted/40")}>
-                <span className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary"><Upload className="h-5 w-5" /></span>
-                <span className="mt-3 font-semibold">{file ? file.name : "Choisir un fichier CSV"}</span>
-                <span className="mt-1 text-sm text-muted-foreground">Taille maximale 10 Mo</span>
-              </button>
+            <SetupCard icon={<FileSpreadsheet className="h-6 w-6" />} title={copy.importTitle} description={copy.importDescription(accountName)}>
+              <input ref={fileInputRef} type="file" accept=".csv,text/csv" className="hidden" disabled={loading} onChange={(event) => selectImportFile(event.target.files?.[0] ?? null)} />
+              <div onDragEnter={handleDragEnter} onDragLeave={handleDragLeave} onDragOver={handleDragOver} onDrop={handleDrop}>
+                <button
+                  type="button"
+                  disabled={loading}
+                  onClick={() => fileInputRef.current?.click()}
+                  className={cn(
+                    "group flex min-h-40 w-full flex-col items-center justify-center rounded-xl border-2 border-dashed p-6 text-center transition-colors disabled:cursor-not-allowed disabled:opacity-60",
+                    isDragging
+                      ? "border-primary bg-primary/10"
+                      : file
+                        ? "border-teal/50 bg-teal/5 hover:border-teal"
+                        : "border-border bg-muted/20 hover:border-primary/50 hover:bg-primary/5"
+                  )}
+                >
+                  <span className={cn("flex h-12 w-12 items-center justify-center rounded-xl transition-colors", isDragging || file ? "bg-primary text-primary-foreground" : "bg-primary/10 text-primary group-hover:bg-primary group-hover:text-primary-foreground")}>
+                    {file ? <FileSpreadsheet className="h-6 w-6" /> : <Upload className="h-6 w-6" />}
+                  </span>
+                  <span className="mt-4 font-semibold">
+                    {isDragging ? copy.dropHere : file ? file.name : copy.dragFile}
+                  </span>
+                  <span className="mt-1 text-sm text-muted-foreground">
+                    {file ? copy.replaceFile(formatFileSize(file.size, locale, copy.units)) : copy.selectFile}
+                  </span>
+                </button>
+              </div>
               <CsvImportGuide prominent className="mt-5" />
               {loading && progress > 0 && (
                 <div className="mt-4">
-                  <div className="mb-2 flex justify-between text-xs text-muted-foreground"><span>Import en cours</span><span>{progress} %</span></div>
+                  <div className="mb-2 flex justify-between text-xs text-muted-foreground"><span>{copy.importProgress}</span><span>{progress} %</span></div>
                   <div className="h-2 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary transition-all" style={{ width: `${progress}%` }} /></div>
                 </div>
               )}
               {error && <ErrorMessage>{error}</ErrorMessage>}
               <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-between">
-                <Button variant="ghost" disabled={loading} onClick={() => finish("skipped")}>Importer plus tard</Button>
+                <Button variant="ghost" disabled={loading} onClick={() => finish("skipped")}>{copy.importLater}</Button>
                 <Button size="lg" disabled={loading || !file} onClick={handleImport}>
                   {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-                  Importer et ouvrir le tableau de bord
+                  {copy.importOpen}
                 </Button>
               </div>
             </SetupCard>
           )}
 
           {step === "groupReady" && (
-            <SetupCard icon={<Users className="h-6 w-6" />} title="Votre groupe est prêt" description="Ajoutez ensuite les dépenses partagées et invitez les autres membres depuis l'onglet Membres.">
+            <SetupCard icon={<Users className="h-6 w-6" />} title={copy.groupReadyTitle} description={copy.groupReadyDescription}>
               <div className="grid gap-3 sm:grid-cols-2">
-                <FeatureLine icon={<Check className="h-4 w-4" />} text="Répartition personnalisée par membre" />
-                <FeatureLine icon={<Check className="h-4 w-4" />} text="Règlements confirmés ou contestés" />
+                <FeatureLine icon={<Check className="h-4 w-4" />} text={copy.customSplit} />
+                <FeatureLine icon={<Check className="h-4 w-4" />} text={copy.confirmedSettlements} />
               </div>
               {error && <ErrorMessage>{error}</ErrorMessage>}
               <Button size="lg" className="mt-6" disabled={loading} onClick={() => finish("completed")}>
                 {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
-                Ouvrir le groupe
+                {copy.openGroup}
               </Button>
             </SetupCard>
           )}
 
           {step === "join" && (
             <Card className="mx-auto max-w-xl animate-fade-in p-7 sm:p-9">
-              <BackButton onClick={() => go("type")} />
+              <BackButton onClick={() => go("type")} label={copy.back} />
               <div className="mt-6 flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary"><KeyRound className="h-6 w-6" /></div>
-              <h1 className="mt-5 text-2xl font-bold tracking-tight">Rejoindre un espace</h1>
-              <p className="mt-2 text-sm text-muted-foreground">Saisissez le code reçu. Un responsable devra valider votre demande.</p>
+              <h1 className="mt-5 text-2xl font-bold tracking-tight">{copy.joinTitle}</h1>
+              <p className="mt-2 text-sm text-muted-foreground">{copy.joinDescription}</p>
               <div className="mt-6 space-y-2">
-                <Label htmlFor="join-code">Code d'accès</Label>
+                <Label htmlFor="join-code">{copy.accessCode}</Label>
                 <Input id="join-code" autoFocus placeholder="A1B2C3D4" className="font-mono uppercase tracking-[0.2em]" value={code} onChange={(event) => setCode(event.target.value.toUpperCase())} />
               </div>
               {error && <ErrorMessage>{error}</ErrorMessage>}
               <Button className="mt-6 w-full" size="lg" disabled={loading || code.trim().length < 4} onClick={handleJoin}>
                 {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <KeyRound className="h-4 w-4" />}
-                Demander l'accès
+                {copy.requestAccess}
               </Button>
             </Card>
           )}
@@ -394,9 +506,9 @@ export default function OnboardingPage() {
           {step === "pending" && (
             <Card className="mx-auto max-w-xl animate-fade-in p-8 text-center">
               <span className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-teal/10 text-teal"><CheckCircle2 className="h-8 w-8" /></span>
-              <h1 className="mt-5 text-2xl font-bold tracking-tight">Demande envoyée</h1>
-              <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">Votre demande pour <strong>{pendingName}</strong> a été transmise. Vous aurez accès aux données après validation par un responsable.</p>
-              <Button variant="outline" className="mt-6" onClick={() => go("type")}><ArrowLeft className="h-4 w-4" />Créer un espace à la place</Button>
+              <h1 className="mt-5 text-2xl font-bold tracking-tight">{copy.requestSent}</h1>
+              <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">{copy.requestSentDescription(pendingName)}</p>
+              <Button variant="outline" className="mt-6" onClick={() => go("type")}><ArrowLeft className="h-4 w-4" />{copy.createInstead}</Button>
             </Card>
           )}
         </div>
@@ -405,14 +517,14 @@ export default function OnboardingPage() {
   );
 }
 
-function ProgressHeader({ current, total, workspaceName }: { current: number; total: number; workspaceName: string }) {
+function ProgressHeader({ current, total, workspaceName, copy }: { current: number; total: number; workspaceName: string; copy: OnboardingCopy }) {
   return (
     <div className="mb-6 flex items-center justify-between gap-4">
       <div>
-        <p className="text-sm font-medium text-muted-foreground">Configuration de {workspaceName}</p>
-        <p className="mt-1 text-xs text-muted-foreground">Étape {current} sur {total}</p>
+        <p className="text-sm font-medium text-muted-foreground">{copy.setup(workspaceName)}</p>
+        <p className="mt-1 text-xs text-muted-foreground">{copy.step(current, total)}</p>
       </div>
-      <div className="flex w-40 gap-2" aria-label={`Étape ${current} sur ${total}`}>
+      <div className="flex w-40 gap-2" aria-label={copy.step(current, total)}>
         {Array.from({ length: total }).map((_, index) => (
           <span key={index} className={cn("h-1.5 flex-1 rounded-full", index < current ? "bg-primary" : "bg-muted")} />
         ))}
@@ -421,22 +533,22 @@ function ProgressHeader({ current, total, workspaceName }: { current: number; to
   );
 }
 
-function ChoiceCard({ icon, eyebrow, title, description, onClick }: { icon: React.ReactNode; eyebrow: string; title: string; description: string; onClick: () => void }) {
+function ChoiceCard({ icon, eyebrow, title, description, choose, onClick }: { icon: React.ReactNode; eyebrow: string; title: string; description: string; choose: string; onClick: () => void }) {
   return (
     <button type="button" onClick={onClick} className="group flex min-h-64 flex-col items-start rounded-2xl border bg-card p-6 text-left shadow-sm transition-all hover:-translate-y-1 hover:border-primary/40 hover:shadow-lg">
       <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary transition-colors group-hover:bg-primary group-hover:text-primary-foreground">{icon}</span>
       <span className="mt-6 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">{eyebrow}</span>
       <span className="mt-2 text-xl font-bold tracking-tight">{title}</span>
       <span className="mt-3 flex-1 text-sm leading-6 text-muted-foreground">{description}</span>
-      <span className="mt-5 inline-flex items-center gap-2 text-sm font-semibold text-primary">Choisir <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" /></span>
+      <span className="mt-5 inline-flex items-center gap-2 text-sm font-semibold text-primary">{choose} <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" /></span>
     </button>
   );
 }
 
-function NameCard({ title, description, label, placeholder, value, onChange, onBack, onSubmit, loading, error }: { title: string; description: string; label: string; placeholder: string; value: string; onChange: (value: string) => void; onBack: () => void; onSubmit: () => void; loading: boolean; error: string | null }) {
+function NameCard({ title, description, label, placeholder, value, onChange, onBack, onSubmit, loading, error, copy }: { title: string; description: string; label: string; placeholder: string; value: string; onChange: (value: string) => void; onBack: () => void; onSubmit: () => void; loading: boolean; error: string | null; copy: OnboardingCopy }) {
   return (
     <Card className="mx-auto max-w-xl animate-fade-in p-7 sm:p-9">
-      <BackButton onClick={onBack} />
+      <BackButton onClick={onBack} label={copy.back} />
       <h1 className="mt-6 text-2xl font-bold tracking-tight">{title}</h1>
       <p className="mt-2 text-sm text-muted-foreground">{description}</p>
       <div className="mt-7 space-y-2">
@@ -446,7 +558,7 @@ function NameCard({ title, description, label, placeholder, value, onChange, onB
       {error && <ErrorMessage>{error}</ErrorMessage>}
       <Button className="mt-6 w-full" size="lg" disabled={loading || !value.trim()} onClick={onSubmit}>
         {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
-        Créer et continuer
+        {copy.createContinue}
       </Button>
     </Card>
   );
@@ -473,6 +585,6 @@ function ErrorMessage({ children }: { children: React.ReactNode }) {
   return <p role="alert" className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-300">{children}</p>;
 }
 
-function BackButton({ onClick }: { onClick: () => void }) {
-  return <button type="button" onClick={onClick} className="inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"><ArrowLeft className="h-4 w-4" />Retour</button>;
+function BackButton({ onClick, label }: { onClick: () => void; label: string }) {
+  return <button type="button" onClick={onClick} className="inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"><ArrowLeft className="h-4 w-4" />{label}</button>;
 }

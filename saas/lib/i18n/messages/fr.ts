@@ -32,6 +32,22 @@ const fr: Messages = {
     transactionsSubtitle: "Toutes vos opérations, comptes et imports.",
     settingsTitle: "Réglages",
     settingsSubtitle: "Personnalisez votre espace AskFinance.",
+    budgetTitle: "Budget",
+    budgetSubtitle: "Vos enveloppes par catégorie et leur suivi sur le mois.",
+    forecastTitle: "Prévisions",
+    forecastSubtitle: "Anticipez votre solde et vos charges à venir.",
+    expensesTitle: "Dépenses",
+    expensesSubtitle: "Vos dépenses, par catégorie et en détail.",
+    membersTitle: "Membres",
+    membersSubtitle: "Gérez qui a accès à « {name} ».",
+    membersUnavailable: "Accès indisponible.",
+    sharedTitle: "Dépenses partagées",
+    sharedSubtitle: "Qui a payé quoi dans « {name} ».",
+    sharedUnavailable: "Les dépenses partagées ne concernent que les espaces de type groupe.",
+    loadingDashboard: "Chargement du tableau de bord",
+    loadingPilotage: "Chargement du pilotage",
+    loadingTransactions: "Chargement des transactions",
+    loading: "Chargement…",
   },
   settings: {
     appearance: "Apparence",
@@ -46,6 +62,7 @@ const fr: Messages = {
     account: "Compte",
     accountDesc: "Gérer votre session.",
     langSaved: "Langue enregistrée",
+    notProvided: "Non renseigné",
   },
   dashboard: {
     greeting: "Bonjour 👋",
@@ -83,6 +100,7 @@ const fr: Messages = {
     emptyResult: "AskFinance prépare vos indicateurs automatiquement",
     emptyAction: "Importer mon premier relevé",
     emptySteps: "3 étapes, puis vos vrais chiffres",
+    notAvailable: "N/D",
   },
 };
 

@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, Plus, Trash2, Upload, X } from "lucide-react";
+import { FileSpreadsheet, Loader2, Plus, Trash2, Upload, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button, type ButtonProps } from "@/components/ui/button";
@@ -26,17 +26,22 @@ import {
   getImports,
   type ImportBatch,
 } from "@/lib/services/imports";
+import { useI18n } from "@/lib/i18n/client";
+import { dashboardCopy } from "@/lib/i18n/dashboard";
+import type { Locale } from "@/lib/i18n/config";
 
-function frDate(iso: string) {
-  return new Date(iso).toLocaleDateString("fr-FR", {
+function localizedDate(iso: string, locale: Locale) {
+  return new Date(iso).toLocaleDateString(locale === "fr" ? "fr-FR" : locale === "uk" ? "uk-UA" : "en-GB", {
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
   });
 }
 
+const MAX_FILE_SIZE = 10 * 1024 * 1024;
+
 export function ImportDialog({
-  triggerLabel = "Importer un relevé",
+  triggerLabel,
   triggerSize = "sm",
   triggerClassName,
 }: {
@@ -45,7 +50,15 @@ export function ImportDialog({
   triggerClassName?: string;
 } = {}) {
   const router = useRouter();
+  const { locale } = useI18n();
+  const copy = dashboardCopy[locale];
+  const formatFileSize = (size: number) => {
+    if (size < 1024) return `${size} ${copy.importDialog.bytes}`;
+    if (size < 1024 * 1024) return `${Math.round(size / 1024)} ${copy.importDialog.kilobytes}`;
+    return `${(size / (1024 * 1024)).toLocaleString(locale === "fr" ? "fr-FR" : locale === "uk" ? "uk-UA" : "en-GB", { maximumFractionDigits: 1 })} ${copy.importDialog.megabytes}`;
+  };
   const inputRef = useRef<HTMLInputElement>(null);
+  const dragDepthRef = useRef(0);
 
   const [open, setOpen] = useState(false);
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -55,6 +68,7 @@ export function ImportDialog({
   const [newName, setNewName] = useState("");
   const [newOpening, setNewOpening] = useState("");
   const [file, setFile] = useState<File | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
   const [importing, setImporting] = useState(false);
   const [importProgress, setImportProgress] = useState(0);
 
@@ -71,20 +85,75 @@ export function ImportDialog({
     refreshLists();
   }
 
+  function selectFile(candidate: File | null) {
+    if (!candidate) return;
+
+    const isCsv =
+      candidate.name.toLowerCase().endsWith(".csv") ||
+      candidate.type === "text/csv" ||
+      candidate.type === "application/vnd.ms-excel";
+
+    if (!isCsv) {
+      toast.error(copy.importDialog.csvOnly);
+      if (inputRef.current) inputRef.current.value = "";
+      return;
+    }
+
+    if (candidate.size > MAX_FILE_SIZE) {
+      toast.error(copy.importDialog.tooLarge);
+      if (inputRef.current) inputRef.current.value = "";
+      return;
+    }
+
+    setFile(candidate);
+  }
+
+  function removeFile() {
+    setFile(null);
+    if (inputRef.current) inputRef.current.value = "";
+  }
+
+  function handleDragEnter(event: React.DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    if (importing) return;
+    dragDepthRef.current += 1;
+    setIsDragging(true);
+  }
+
+  function handleDragLeave(event: React.DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    if (importing) return;
+    dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
+    if (dragDepthRef.current === 0) setIsDragging(false);
+  }
+
+  function handleDragOver(event: React.DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    if (!importing) event.dataTransfer.dropEffect = "copy";
+  }
+
+  function handleDrop(event: React.DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    dragDepthRef.current = 0;
+    setIsDragging(false);
+    if (importing) return;
+    selectFile(event.dataTransfer.files?.[0] ?? null);
+  }
+
   async function handleImport() {
     // 1. Résoudre le compte cible
     let accountId = selectedAccount;
     if (mode === "new") {
-      if (!newName.trim()) return toast.error("Donnez un nom au compte.");
+      if (!newName.trim()) return toast.error(copy.importDialog.accountNameRequired);
       const acc = await createAccount(
         newName.trim(),
         Number(newOpening.replace(",", ".")) || 0
       );
-      if (!acc) return toast.error("Création du compte impossible.");
+      if (!acc) return toast.error(copy.importDialog.accountFailed);
       accountId = acc.id;
     }
-    if (!accountId) return toast.error("Choisissez un compte.");
-    if (!file) return toast.error("Choisissez un fichier CSV.");
+    if (!accountId) return toast.error(copy.importDialog.chooseAccount);
+    if (!file) return toast.error(copy.importDialog.chooseCsv);
 
     // 2. Importer
     setImporting(true);
@@ -95,24 +164,24 @@ export function ImportDialog({
 
     if (res.inserted > 0) {
       const notes: string[] = [];
-      if (res.duplicates > 0) notes.push(`${res.duplicates} doublon(s) ignoré(s)`);
-      if (res.skipped > 0) notes.push(`${res.skipped} ligne(s) ignorée(s)`);
-      toast.success(`${res.inserted} transaction(s) importée(s)`, {
+      if (res.duplicates > 0) notes.push(copy.importDialog.ignored(res.duplicates));
+      if (res.skipped > 0) notes.push(copy.importDialog.skipped(res.skipped));
+      toast.success(copy.importDialog.imported(res.inserted), {
         description: notes.length ? notes.join(" · ") : undefined,
       });
-      setFile(null);
+      removeFile();
       setNewName("");
       setNewOpening("");
       setMode("existing");
       await refreshLists();
       router.refresh();
     } else if (res.duplicates > 0) {
-      toast.info("Aucune nouvelle transaction", {
-        description: `${res.duplicates} doublon(s) déjà présent(s)`,
+      toast.info(copy.importDialog.noNew, {
+        description: copy.importDialog.duplicatesPresent(res.duplicates),
       });
     } else {
-      toast.error("Aucune transaction importée", {
-        description: res.errors[0] ?? "Vérifiez le format du fichier.",
+      toast.error(copy.importDialog.noneImported, {
+        description: res.errors[0] ?? copy.importDialog.checkFormat,
       });
     }
   }
@@ -120,17 +189,17 @@ export function ImportDialog({
   async function handleCancel(batch: ImportBatch) {
     if (
       !window.confirm(
-        `Annuler cet import et supprimer ses ${batch.count} transaction(s) ?`
+        copy.importDialog.cancelConfirm(batch.count)
       )
     )
       return;
     const ok = await cancelImport(batch.id);
     if (ok) {
-      toast.success("Import annulé");
+      toast.success(copy.importDialog.cancelled);
       await refreshLists();
       router.refresh();
     } else {
-      toast.error("Annulation impossible.");
+      toast.error(copy.importDialog.cancelFailed);
     }
   }
 
@@ -138,7 +207,7 @@ export function ImportDialog({
     <>
       <Button size={triggerSize} className={triggerClassName} onClick={openDialog}>
         <Plus className="h-4 w-4" />
-        {triggerLabel}
+        {triggerLabel ?? copy.importDialog.title}
       </Button>
 
       {open && (
@@ -149,11 +218,11 @@ export function ImportDialog({
           />
           <div className="relative z-10 max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-xl border bg-card p-6 shadow-xl">
             <div className="mb-4 flex items-center justify-between">
-              <h2 className="text-lg font-bold">Importer un relevé</h2>
+              <h2 className="text-lg font-bold">{copy.importDialog.title}</h2>
               <button
                 onClick={() => setOpen(false)}
                 className="text-muted-foreground hover:text-foreground"
-                aria-label="Fermer"
+                aria-label={copy.common.close}
               >
                 <X className="h-5 w-5" />
               </button>
@@ -162,7 +231,7 @@ export function ImportDialog({
             {/* Compte cible */}
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <label className="text-sm font-medium">Compte</label>
+                <label className="text-sm font-medium">{copy.importDialog.account}</label>
                 <button
                   type="button"
                   onClick={() =>
@@ -171,7 +240,7 @@ export function ImportDialog({
                   className="text-xs font-medium text-primary hover:underline"
                   disabled={accounts.length === 0}
                 >
-                  {mode === "existing" ? "+ Nouveau compte" : "Compte existant"}
+                  {mode === "existing" ? copy.importDialog.newAccount : copy.importDialog.existingAccount}
                 </button>
               </div>
 
@@ -181,7 +250,7 @@ export function ImportDialog({
                   onValueChange={setSelectedAccount}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Choisir un compte" />
+                    <SelectValue placeholder={copy.importDialog.accountPlaceholder} />
                   </SelectTrigger>
                   <SelectContent>
                     {accounts.map((a) => (
@@ -196,12 +265,12 @@ export function ImportDialog({
                   <Input
                     value={newName}
                     onChange={(e) => setNewName(e.target.value)}
-                    placeholder="Nom du compte"
+                    placeholder={copy.importDialog.accountName}
                   />
                   <Input
                     value={newOpening}
                     onChange={(e) => setNewOpening(e.target.value)}
-                    placeholder="Solde d'ouverture €"
+                    placeholder={copy.importDialog.openingBalance}
                     inputMode="decimal"
                     className="w-40"
                   />
@@ -211,22 +280,68 @@ export function ImportDialog({
 
             {/* Fichier */}
             <div className="mt-4 space-y-2">
-              <label className="text-sm font-medium">Fichier CSV</label>
+              <label className="text-sm font-medium">{copy.importDialog.file}</label>
               <input
                 ref={inputRef}
                 type="file"
                 accept=".csv,text/csv"
                 className="hidden"
-                onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+                disabled={importing}
+                onChange={(e) => selectFile(e.target.files?.[0] ?? null)}
               />
-              <Button
-                variant="outline"
-                className="w-full justify-start"
-                onClick={() => inputRef.current?.click()}
+              <div
+                onDragEnter={handleDragEnter}
+                onDragLeave={handleDragLeave}
+                onDragOver={handleDragOver}
+                onDrop={handleDrop}
               >
-                <Upload className="h-4 w-4" />
-                {file ? file.name : "Choisir un fichier…"}
-              </Button>
+                <button
+                  type="button"
+                  disabled={importing}
+                  onClick={() => inputRef.current?.click()}
+                  className={`group flex min-h-40 w-full flex-col items-center justify-center rounded-xl border-2 border-dashed px-6 py-7 text-center transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
+                    isDragging
+                      ? "border-primary bg-primary/10"
+                      : file
+                        ? "border-teal/50 bg-teal/5 hover:border-teal"
+                        : "border-border bg-muted/20 hover:border-primary/50 hover:bg-primary/5"
+                  }`}
+                >
+                  <span
+                    className={`flex h-12 w-12 items-center justify-center rounded-xl transition-colors ${
+                      isDragging || file
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-primary/10 text-primary group-hover:bg-primary group-hover:text-primary-foreground"
+                    }`}
+                  >
+                    {file ? <FileSpreadsheet className="h-6 w-6" /> : <Upload className="h-6 w-6" />}
+                  </span>
+                  <span className="mt-4 text-sm font-semibold text-foreground">
+                    {isDragging
+                      ? copy.importDialog.drop
+                      : file
+                        ? file.name
+                        : copy.importDialog.drag}
+                  </span>
+                  <span className="mt-1 text-xs leading-5 text-muted-foreground">
+                    {file
+                      ? copy.importDialog.replace(formatFileSize(file.size))
+                      : copy.importDialog.select}
+                  </span>
+                </button>
+              </div>
+              {file && !importing && (
+                <div className="flex items-center justify-between gap-3 rounded-lg bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+                  <span>{copy.importDialog.ready}</span>
+                  <button
+                    type="button"
+                    onClick={removeFile}
+                    className="inline-flex items-center gap-1 font-medium text-foreground transition-colors hover:text-red-500"
+                  >
+                    <X className="h-3.5 w-3.5" /> {copy.importDialog.remove}
+                  </button>
+                </div>
+              )}
             </div>
 
             <CsvImportGuide className="mt-4" />
@@ -237,14 +352,14 @@ export function ImportDialog({
               disabled={importing}
             >
               {importing ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-              {importing ? `Import en cours… ${importProgress} %` : "Importer"}
+              {importing ? copy.importDialog.importing(importProgress) : copy.importDialog.import}
             </Button>
 
             {/* Historique des imports */}
             {imports.length > 0 && (
               <div className="mt-6 border-t pt-4">
                 <p className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                  Imports récents
+                  {copy.importDialog.recent}
                 </p>
                 <ul className="max-h-40 space-y-1 overflow-y-auto">
                   {imports.map((b) => (
@@ -253,15 +368,15 @@ export function ImportDialog({
                       className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted/40"
                     >
                       <div className="min-w-0 flex-1">
-                        <p className="truncate">{b.filename ?? "Relevé"}</p>
+                        <p className="truncate">{b.filename ?? copy.importDialog.statement}</p>
                         <p className="text-xs text-muted-foreground">
-                          {frDate(b.created_at)} · {b.count} transaction(s)
+                          {localizedDate(b.created_at, locale)} · {copy.importDialog.transactions(b.count)}
                         </p>
                       </div>
                       <button
                         onClick={() => handleCancel(b)}
                         className="shrink-0 text-muted-foreground hover:text-red-500"
-                        aria-label="Annuler cet import"
+                        aria-label={copy.importDialog.cancelImport}
                       >
                         <Trash2 className="h-4 w-4" />
                       </button>

@@ -4,9 +4,12 @@ import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 
 import type { LedgerContribution } from "@/lib/data/group";
 import { formatEUR } from "@/lib/utils";
+import { useI18n } from "@/lib/i18n/client";
+import { dashboardCopy } from "@/lib/i18n/dashboard";
 
 // Répartition des paiements d'un groupe : qui a avancé combien.
 export function PaymentsChart({ data }: { data: LedgerContribution[] }) {
+  const { locale } = useI18n();
   const total = data.reduce((s, c) => s + c.paid, 0);
   if (total <= 0) return null;
 
@@ -41,7 +44,7 @@ export function PaymentsChart({ data }: { data: LedgerContribution[] }) {
           </PieChart>
         </ResponsiveContainer>
         <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-          <span className="text-xs text-muted-foreground">Payé</span>
+          <span className="text-xs text-muted-foreground">{dashboardCopy[locale].charts.paid}</span>
           <span className="text-lg font-bold">{formatEUR(total)}</span>
         </div>
       </div>

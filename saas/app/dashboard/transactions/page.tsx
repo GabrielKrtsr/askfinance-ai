@@ -70,11 +70,11 @@ export default async function TransactionsPage({ searchParams = {} }: Transactio
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">
-          {isPerso ? "Dépenses" : t("pages.transactionsTitle")}
+          {isPerso ? t("pages.expensesTitle") : t("pages.transactionsTitle")}
         </h1>
         <p className="text-sm text-muted-foreground">
           {isPerso
-            ? "Vos dépenses, par catégorie et en détail."
+            ? t("pages.expensesSubtitle")
             : t("pages.transactionsSubtitle")}
         </p>
       </div>

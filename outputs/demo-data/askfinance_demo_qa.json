@@ -1,0 +1,19 @@
+{
+  "sourceHeadersMatch": true,
+  "columns": 13,
+  "rows": 441,
+  "minDate": "02/01/2025",
+  "maxDate": "28/06/2026",
+  "durationDays": 542,
+  "coversMoreThanOneYear": true,
+  "debitRows": 393,
+  "creditRows": 48,
+  "totalDebits": -32995.47,
+  "totalCredits": 56560.66,
+  "energyRows": 18,
+  "salaryRows": 18,
+  "intentionalDuplicateRows": 2,
+  "csvOutput": "C:\\Users\\gabri\\Desktop\\askfinance-ai\\outputs\\demo-data\\askfinance_demo_18_mois.csv",
+  "xlsxOutput": "C:\\Users\\gabri\\Desktop\\askfinance-ai\\outputs\\demo-data\\askfinance_demo_18_mois.xlsx",
+  "inspection": "{\"kind\":\"table\",\"sheet\":\"Operations demo\",\"address\":\"A1:M12\",\"rows\":12,\"cols\":13,\"values\":[[\"Date de comptabilisation\",\"Libelle simplifie\",\"Libelle operation\",\"Reference\",\"Informations complementaires\",\"Type operation\",\"Categorie\",\"Sous categorie\",\"Debit\",\"Credit\",\"Date operation\",\"Date de valeur\",\"Pointage operation\"],[\"2026-06-28T00:00:00.000Z\",\"ATELIER HORIZON DEMO\",\"VIR SEPA ATELIER HORIZON SALAIRE 2026-06\",\"DEMO202606000410\",\"SALAIRE NET 2026-06 DONNEES FICTIVES\",\"Virement recu\",\"Salaire et revenus\",\"Salaire\",null,2980,\"2026-06-28T00:00:00.000Z\",\"2026-06-28T00:00:00.000Z\",0],[\"2026-06-27T00:00:00.000Z\",\"INTERMARCHE\",\"CB INTERMARCHE FACT 260626\",\"DEMO202606000428\",\"\",\"Carte bancaire\",\"Alimentation\",\"Supermarche\",-47.34,null,\"2026-06-26T00:00:00.000Z\",\"2026-06-27T00:00:00.000Z\",0],[\"2026-06-26T00:00:00.000Z\",\"UBER\",\"CB UBER TRIP FACT 250626\",\"DEMO202606000432\",\"\",\"Carte bancaire\",\"Transport\",\"Taxi et VTC\",-11.97,null,\"2026-06-25T00:00:00.000Z\",\"2026-06-26T00:00:00.000Z\",0],[\"2026-06-24T00:00:00.000Z\",\"NAVIGO\",\"PRLV SEPA NAVIGO 2026-06\",\"DEMO202606000421\",\"ABONNEMENT DEMO\",\"Prelevement\",\"Transport\",\"Transports en commun\",-86.4,null,\"2026-06-24T00:00:00.000Z\",\"2026-06-24T00:00:00.000Z\",0],[\"2026-06-23T00:00:00.000Z\",\"BISTROT CENTRAL\",\"CB BISTROT CENTRAL FACT 220626\",\"DEMO202606000430\",\"\",\"Carte bancaire\",\"Alimentation\",\"Restaurants et cafes\",-41.26,null,\"2026-06-22T00:00:00.000Z\",\"2026-06-23T00:00:00.000Z\",0],[\"2026-06-21T00:00:00.000Z\",\"BASIC FIT\",\"PRLV SEPA BASIC FIT 2026-06\",\"DEMO202606000420\",\"ABONNEMENT DEMO\",\"Prelevement\",\"Sante et bien-etre\",\"Sport\",-24.99,null,\"2026-06-21T00:00:00.000Z\",\"2026-06-21T00:00:00.000Z\",0],[\"2026-06-21T00:00:00.000Z\",\"BASIC FIT\",\"PRLV SEPA BASIC FIT DOUBLE DEMO\",\"DEMO202606000441\",\"DOUBLON VOLONTAIRE POUR DEMONSTRATION\",\"Prelevement\",\"Sante et bien-etre\",\"Sport\",-24.99,null,\"2026-06-21T00:00:00.000Z\",\"2026-06-21T00:00:00.000Z\",0],[\"2026-06-21T00:00:00.000Z\",\"MONOPRIX\",\"CB MONOPRIX FACT 200626\",\"DEMO202606000427\",\"\",\"Carte bancaire\",\"Alimentation\",\"Supermarche\",-68.4,null,\"2026-06-20T00:00:00.000Z\",\"2026-06-21T00:00:00.000Z\",0],[\"2026-06-20T00:00:00.000Z\",\"MISSION FREELANCE DEMO\",\"VIR SEPA MISSION FREELANCE DEMO\",\"DEMO202606000411\",\"MISSION TRIMESTRIELLE 2026-06\",\"Virement recu\",\"Salaire et revenus\",\"Revenus complementaires\",null,638.85,\"2026-06-20T00:00:00.000Z\",\"2026-06-20T00:00:00.000Z\",0],[\"2026-06-19T00:00:00.000Z\",\"REMBOURSEMENT GROUPE DEMO\",\"VIR SEPA REMBOURSEMENT GROUPE DEMO\",\"DEMO202606000434\",\"PARTAGE DE DEPENSES FICTIF\",\"Virement recu\",\"Virements\",\"Remboursement entre proches\",null,48.01,\"2026-06-19T00:00:00.000Z\",\"2026-06-19T00:00:00.000Z\",0],[\"2026-06-19T00:00:00.000Z\",\"OPENAI CHATGPT\",\"CB OPENAI CHATGPT 2026-06\",\"DEMO202606000419\",\"ABONNEMENT DEMO\",\"Carte bancaire\",\"Shopping et services\",\"Services numeriques\",-23,null,\"2026-06-18T00:00:00.000Z\",\"2026-06-19T00:00:00.000Z\",0]]}"
+}

@@ -4,8 +4,11 @@ import { MessageSquareText } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { openFloatingAiChat } from "@/components/dashboard/floating-ai-chat";
+import { useI18n } from "@/lib/i18n/client";
+import { dashboardCopy } from "@/lib/i18n/dashboard";
 
 export function OpenAiChatButton() {
+  const { locale } = useI18n();
   return (
     <Button
       type="button"
@@ -14,7 +17,7 @@ export function OpenAiChatButton() {
       onClick={openFloatingAiChat}
     >
       <MessageSquareText className="h-4 w-4" />
-      Ouvrir le copilote
+      {dashboardCopy[locale].charts.openCopilot}
     </Button>
   );
 }

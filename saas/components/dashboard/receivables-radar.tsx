@@ -31,8 +31,12 @@ import {
 } from "@/lib/services/receivables";
 import { confirmReceivablePayment, createReceivable, recordPartialReceivablePayment, recordReceivableReminder, removeReceivable } from "@/lib/actions/receivables";
 import { usePilotage } from "@/components/dashboard/pilotage-provider";
+import { useI18n } from "@/lib/i18n/client";
+import { dashboardCopy } from "@/lib/i18n/dashboard";
 
 export function ReceivablesRadar({ workspaceId }: { workspaceId: string }) {
+  const { locale } = useI18n();
+  const copy = dashboardCopy[locale];
   // Dans un PilotageProvider : données partagées (un seul appel API pour la
   // page). Sinon : fetch autonome, comme avant.
   const shared = usePilotage();
@@ -77,17 +81,17 @@ export function ReceivablesRadar({ workspaceId }: { workspaceId: string }) {
   async function handleSave() {
     const value = Number(amount.replace(",", "."));
     if (!client.trim() || !Number.isFinite(value) || value <= 0 || !dueDate) {
-      toast.error("Renseignez un client, un montant et une date prévue.");
+      toast.error(copy.receivables.required);
       return;
     }
     setSaving(true);
     const ok = await createReceivable({ client: client.trim(), amount: value, dueDate, invoiceNumber, contactEmail });
     setSaving(false);
     if (!ok) {
-      toast.error("Impossible d'enregistrer l'encaissement attendu.");
+      toast.error(copy.receivables.saveFailed);
       return;
     }
-    toast.success("Encaissement attendu ajouté");
+    toast.success(copy.receivables.added);
     setClient("");
     setAmount("");
     setDueDate("");
@@ -100,7 +104,7 @@ export function ReceivablesRadar({ workspaceId }: { workspaceId: string }) {
   async function handleDelete(id: string) {
     const ok = await removeReceivable(id);
     if (!ok) {
-      toast.error("Suppression impossible.");
+      toast.error(copy.receivables.deleteFailed);
       return;
     }
     await refresh();
@@ -112,12 +116,12 @@ export function ReceivablesRadar({ workspaceId }: { workspaceId: string }) {
       await navigator.clipboard.writeText(r.relance);
       await recordReceivableReminder({ receivableId: r.id, content: r.relance, sent: false });
       setCopied(r.id);
-      toast.success("Relance copiée", {
-        description: "Le brouillon est dans votre presse-papiers.",
+      toast.success(copy.receivables.copied, {
+        description: copy.receivables.clipboard,
       });
       setTimeout(() => setCopied(null), 2000);
     } catch {
-      toast.error("Copie impossible sur ce navigateur.");
+      toast.error(copy.receivables.copyUnavailable);
     }
   }
 
@@ -125,32 +129,32 @@ export function ReceivablesRadar({ workspaceId }: { workspaceId: string }) {
     if (!r.relance) return;
     try {
       await recordReceivableReminder({ receivableId: r.id, content: r.relance, sent: true });
-      toast.success("Relance marquée comme envoyée et journalisée");
+      toast.success(copy.receivables.reminderSent);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Enregistrement impossible.");
+      toast.error(e instanceof Error ? e.message : copy.receivables.saveGenericFailed);
     }
   }
 
   async function confirmPayment(id: string) {
     try {
       await confirmReceivablePayment(id);
-      toast.success("Paiement confirmé et journalisé");
+      toast.success(copy.receivables.paymentConfirmed);
       await refresh();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Confirmation impossible.");
+      toast.error(e instanceof Error ? e.message : copy.receivables.confirmationFailed);
     }
   }
 
   async function partialPayment(r: Receivable) {
-    const raw = window.prompt("Montant reçu (€)");
+    const raw = window.prompt(copy.receivables.amountPrompt);
     if (!raw) return;
     const value = Number(raw.replace(",", "."));
     try {
       await recordPartialReceivablePayment(r.id, value);
-      toast.success("Paiement partiel enregistré et journalisé");
+      toast.success(copy.receivables.partialSaved);
       await refresh();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Enregistrement impossible.");
+      toast.error(e instanceof Error ? e.message : copy.receivables.saveGenericFailed);
     }
   }
 
@@ -164,21 +168,21 @@ export function ReceivablesRadar({ workspaceId }: { workspaceId: string }) {
       <CardHeader className="flex-row items-start justify-between space-y-0">
         <div>
           <CardTitle className="flex items-center gap-2">
-            Radar des encaissements
+            {copy.receivables.title}
             {late.length > 0 && (
               <span className="inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-600">
-                {late.length} en retard
+                {late.length} {copy.receivables.overdue}
               </span>
             )}
           </CardTitle>
           <CardDescription>
-            Déclarez les virements attendus. L'app détecte ceux qui n'arrivent pas
+            {copy.receivables.description}
           </CardDescription>
         </div>
         {!adding && (
           <Button variant="outline" size="sm" onClick={() => setAdding(true)}>
             <Plus className="h-4 w-4" />
-            Ajouter
+            {copy.common.add}
           </Button>
         )}
       </CardHeader>
@@ -188,19 +192,19 @@ export function ReceivablesRadar({ workspaceId }: { workspaceId: string }) {
           <div className="mb-4 grid gap-2 rounded-lg border bg-muted/30 p-3 sm:grid-cols-2 lg:grid-cols-5 lg:items-end">
             <div className="flex-1 space-y-1">
               <label className="text-xs font-medium text-muted-foreground">
-                Client
+                {copy.receivables.client}
               </label>
               <Input
                 value={client}
                 onChange={(e) => setClient(e.target.value)}
-                placeholder="Ex. ACME SARL"
+                placeholder={copy.receivables.clientPlaceholder}
               />
             </div>
-            <div className="space-y-1"><label className="text-xs font-medium text-muted-foreground">N° facture</label><Input value={invoiceNumber} onChange={(e) => setInvoiceNumber(e.target.value)} placeholder="FAC-2026-042" /></div>
-            <div className="space-y-1"><label className="text-xs font-medium text-muted-foreground">E-mail client</label><Input type="email" value={contactEmail} onChange={(e) => setContactEmail(e.target.value)} placeholder="compta@client.fr" /></div>
+            <div className="space-y-1"><label className="text-xs font-medium text-muted-foreground">{copy.receivables.invoice}</label><Input value={invoiceNumber} onChange={(e) => setInvoiceNumber(e.target.value)} placeholder={copy.receivables.invoicePlaceholder} /></div>
+            <div className="space-y-1"><label className="text-xs font-medium text-muted-foreground">{copy.receivables.clientEmail}</label><Input type="email" value={contactEmail} onChange={(e) => setContactEmail(e.target.value)} placeholder={copy.receivables.emailPlaceholder} /></div>
             <div className="space-y-1 sm:w-28">
               <label className="text-xs font-medium text-muted-foreground">
-                Montant (€)
+                {copy.receivables.amount}
               </label>
               <Input
                 type="number"
@@ -212,7 +216,7 @@ export function ReceivablesRadar({ workspaceId }: { workspaceId: string }) {
             </div>
             <div className="space-y-1 sm:w-40">
               <label className="text-xs font-medium text-muted-foreground">
-                Date prévue
+                {copy.receivables.dueDate}
               </label>
               <Input
                 type="date"
@@ -225,11 +229,11 @@ export function ReceivablesRadar({ workspaceId }: { workspaceId: string }) {
                 {saving ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
-                  "Enregistrer"
+                  copy.common.save
                 )}
               </Button>
               <Button size="sm" variant="ghost" onClick={() => setAdding(false)}>
-                Annuler
+                {copy.common.cancel}
               </Button>
             </div>
           </div>
@@ -237,18 +241,17 @@ export function ReceivablesRadar({ workspaceId }: { workspaceId: string }) {
 
         {loading ? (
           <p className="py-8 text-center text-sm text-muted-foreground">
-            Chargement…
+            {copy.common.loading}
           </p>
         ) : error ? (
           <p className="py-8 text-center text-sm text-muted-foreground">
-            Radar indisponible. Le serveur d'analyse est-il démarré ?
+            {copy.receivables.unavailable}
           </p>
         ) : isEmpty && !adding ? (
           <div className="flex flex-col items-center gap-2 py-8 text-center text-sm text-muted-foreground">
             <Inbox className="h-6 w-6" />
             <p>
-              Aucun encaissement attendu. Cliquez sur « Ajouter » pour déclarer un
-              virement que vous attendez d'un client.
+              {copy.receivables.empty}
             </p>
           </div>
         ) : (
@@ -266,11 +269,11 @@ export function ReceivablesRadar({ workspaceId }: { workspaceId: string }) {
                     </span>
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-semibold">{r.client}</p>
-                      {r.invoice_number && <p className="text-xs text-muted-foreground">Facture {r.invoice_number}</p>}
+                      {r.invoice_number && <p className="text-xs text-muted-foreground">{copy.receivables.invoiceShort} {r.invoice_number}</p>}
                       <p className="text-xs text-red-700">
-                        Attendu le{" "}
-                        {r.date_prevue ? formatDateFr(r.date_prevue) : "Non renseignée"} ·{" "}
-                        {r.statut === "partial" ? `Paiement partiel · ${formatEUR(r.paid_amount)} reçus` : `${r.jours_retard} j de retard`}
+                        {copy.receivables.expectedOn}{" "}
+                        {r.date_prevue ? formatDateFr(r.date_prevue) : copy.receivables.notProvided} ·{" "}
+                        {r.statut === "partial" ? copy.receivables.partialStatus(formatEUR(r.paid_amount)) : copy.receivables.daysLate(r.jours_retard)}
                       </p>
                     </div>
                     <span className="shrink-0 text-sm font-semibold tabular-nums text-red-700">
@@ -284,21 +287,21 @@ export function ReceivablesRadar({ workspaceId }: { workspaceId: string }) {
                     >
                       {copied === r.id ? (
                         <>
-                          <Check className="h-4 w-4" /> Copié
+                          <Check className="h-4 w-4" /> {copy.receivables.copiedButton}
                         </>
                       ) : (
                         <>
-                          <Copy className="h-4 w-4" /> Relance
+                          <Copy className="h-4 w-4" /> {copy.receivables.reminder}
                         </>
                       )}
                     </Button>
-                    <Button size="sm" variant="ghost" className="shrink-0" onClick={() => markReminderSent(r)}>Marquer envoyée</Button>
-                    <Button size="sm" variant="outline" className="shrink-0 bg-white" onClick={() => confirmPayment(r.id)}><CheckCircle2 className="h-4 w-4" />Paiement reçu</Button>
-                    <Button size="sm" variant="ghost" className="shrink-0" onClick={() => partialPayment(r)}>Partiel</Button>
+                    <Button size="sm" variant="ghost" className="shrink-0" onClick={() => markReminderSent(r)}>{copy.receivables.markSent}</Button>
+                    <Button size="sm" variant="outline" className="shrink-0 bg-white" onClick={() => confirmPayment(r.id)}><CheckCircle2 className="h-4 w-4" />{copy.receivables.paymentReceived}</Button>
+                    <Button size="sm" variant="ghost" className="shrink-0" onClick={() => partialPayment(r)}>{copy.receivables.partial}</Button>
                     <button
                       onClick={() => handleDelete(r.id)}
                       className="shrink-0 text-red-400 hover:text-red-600"
-                      aria-label="Supprimer"
+                      aria-label={copy.common.delete}
                     >
                       <X className="h-4 w-4" />
                     </button>
@@ -311,7 +314,7 @@ export function ReceivablesRadar({ workspaceId }: { workspaceId: string }) {
             {upcoming.length > 0 && (
               <div>
                 <p className="mb-2 text-xs font-medium text-muted-foreground">
-                  À venir
+                  {copy.receivables.upcoming}
                 </p>
                 <ul className="divide-y">
                   {upcoming.map((r) => (
@@ -321,21 +324,21 @@ export function ReceivablesRadar({ workspaceId }: { workspaceId: string }) {
                       </span>
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-medium">{r.client}</p>
-                        {r.invoice_number && <p className="text-xs text-muted-foreground">Facture {r.invoice_number}</p>}
+                        {r.invoice_number && <p className="text-xs text-muted-foreground">{copy.receivables.invoiceShort} {r.invoice_number}</p>}
                         <p className="text-xs text-muted-foreground">
-                          Prévu le{" "}
-                          {r.date_prevue ? formatDateFr(r.date_prevue) : "Non renseignée"}
+                          {copy.receivables.scheduledOn}{" "}
+                          {r.date_prevue ? formatDateFr(r.date_prevue) : copy.receivables.notProvided}
                         </p>
                       </div>
                       <span className="shrink-0 text-right text-sm font-semibold tabular-nums">
                         {formatEUR(r.montant_attendu)}
                       </span>
-                      <Button size="sm" variant="ghost" onClick={() => confirmPayment(r.id)}><CheckCircle2 className="h-4 w-4" />Reçu</Button>
-                      <Button size="sm" variant="ghost" onClick={() => partialPayment(r)}>Partiel</Button>
+                      <Button size="sm" variant="ghost" onClick={() => confirmPayment(r.id)}><CheckCircle2 className="h-4 w-4" />{copy.receivables.received}</Button>
+                      <Button size="sm" variant="ghost" onClick={() => partialPayment(r)}>{copy.receivables.partial}</Button>
                       <button
                         onClick={() => handleDelete(r.id)}
                         className="shrink-0 text-muted-foreground opacity-0 transition-opacity hover:text-red-500 group-hover:opacity-100"
-                        aria-label="Supprimer"
+                        aria-label={copy.common.delete}
                       >
                         <X className="h-4 w-4" />
                       </button>
@@ -349,7 +352,7 @@ export function ReceivablesRadar({ workspaceId }: { workspaceId: string }) {
             {received.length > 0 && (
               <div>
                 <p className="mb-2 text-xs font-medium text-muted-foreground">
-                  Reçus
+                  {copy.receivables.receivedPlural}
                 </p>
                 <ul className="divide-y">
                   {received.map((r) => (
@@ -360,7 +363,7 @@ export function ReceivablesRadar({ workspaceId }: { workspaceId: string }) {
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-medium">{r.client}</p>
                         <p className="text-xs text-muted-foreground">
-                          Reçu le {r.date_recu ? formatDateFr(r.date_recu) : "date inconnue"}
+                          {copy.receivables.receivedOn} {r.date_recu ? formatDateFr(r.date_recu) : copy.receivables.unknownDate}
                         </p>
                       </div>
                       <span className="shrink-0 text-right text-sm font-semibold tabular-nums text-emerald-600">
@@ -369,7 +372,7 @@ export function ReceivablesRadar({ workspaceId }: { workspaceId: string }) {
                       <button
                         onClick={() => handleDelete(r.id)}
                         className="shrink-0 text-muted-foreground opacity-0 transition-opacity hover:text-red-500 group-hover:opacity-100"
-                        aria-label="Supprimer"
+                        aria-label={copy.common.delete}
                       >
                         <X className="h-4 w-4" />
                       </button>
@@ -381,7 +384,7 @@ export function ReceivablesRadar({ workspaceId }: { workspaceId: string }) {
 
             {!isEmpty && (
               <div className="flex items-center justify-between border-t pt-3 text-sm">
-                <span className="text-muted-foreground">Reste à encaisser</span>
+                <span className="text-muted-foreground">{copy.receivables.remaining}</span>
                 <span
                   className={cn(
                     "font-bold tabular-nums",

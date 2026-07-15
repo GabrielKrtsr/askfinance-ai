@@ -29,14 +29,10 @@ import type {
   LedgerSettlement,
 } from "@/lib/data/group";
 import { cn, formatEUR } from "@/lib/utils";
+import { useI18n } from "@/lib/i18n/client";
+import { dashboardCopy } from "@/lib/i18n/dashboard";
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
-
-const SETTLEMENT_STATUS_LABEL: Record<LedgerSettlement["status"], string> = {
-  paid: "Payé",
-  confirmed: "Confirmé",
-  disputed: "Contesté",
-};
 
 const SETTLEMENT_STATUS_CLASS: Record<LedgerSettlement["status"], string> = {
   paid: "border-amber-200 bg-amber-50 text-amber-700",
@@ -52,6 +48,9 @@ export function GroupLedger({
   workspaceId: string;
 }) {
   const router = useRouter();
+  const { locale } = useI18n();
+  const copy = dashboardCopy[locale];
+  const settlementStatusLabels: Record<LedgerSettlement["status"], string> = { paid: copy.group.paid, confirmed: copy.group.confirmed, disputed: copy.group.disputed };
   const [busy, setBusy] = useState<string | null>(null);
 
   // Formulaire d'ajout
@@ -69,7 +68,7 @@ export function GroupLedger({
       await fn();
       router.refresh();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Action impossible.");
+      toast.error(e instanceof Error ? e.message : copy.group.actionFailed);
     } finally {
       setBusy(null);
     }
@@ -78,7 +77,7 @@ export function GroupLedger({
   async function submitExpense() {
     const amt = Number(amount.replace(",", "."));
     if (!label.trim() || !(amt > 0)) {
-      toast.error("Libellé et montant valides requis.");
+      toast.error(copy.group.invalidExpense);
       return;
     }
     const shares =
@@ -129,7 +128,7 @@ export function GroupLedger({
   }
 
   function remove(id: string) {
-    if (!window.confirm("Supprimer cette dépense partagée ?")) return;
+    if (!window.confirm(copy.group.deleteConfirm)) return;
     void withBusy(`del-${id}`, () => deleteSharedExpense(id));
   }
 
@@ -144,15 +143,15 @@ export function GroupLedger({
       <Card>
         <CardContent className="p-5">
           <div className="flex items-center justify-between">
-            <h2 className="text-sm font-semibold">Équilibre du groupe</h2>
+            <h2 className="text-sm font-semibold">{copy.group.balance}</h2>
             <span className="text-xs text-muted-foreground">
-              {formatEUR(ledger.total)} partagés
+              {formatEUR(ledger.total)} {copy.group.shared}
             </span>
           </div>
 
           {ledger.debts.length === 0 ? (
             <p className="mt-3 text-sm text-muted-foreground">
-              Tout est équilibré. 🎉
+              {copy.group.balanced}
             </p>
           ) : (
             <ul className="mt-3 space-y-2">
@@ -162,7 +161,7 @@ export function GroupLedger({
                   className="flex items-center justify-between gap-3 rounded-lg border bg-muted/30 px-3 py-2"
                 >
                   <span className="text-sm">
-                    <strong>{d.fromName}</strong> doit{" "}
+                    <strong>{d.fromName}</strong> {copy.group.owes}{" "}
                     <strong>{d.toName}</strong>{" "}
                     <span className="font-semibold tabular-nums">
                       {formatEUR(d.amount)}
@@ -183,7 +182,7 @@ export function GroupLedger({
                       ) : (
                         <HandCoins className="h-4 w-4" />
                       )}
-                      Régler
+                      {copy.group.settle}
                     </Button>
                   )}
                 </li>
@@ -218,9 +217,9 @@ export function GroupLedger({
       {ledger.total > 0 && (
         <Card>
           <CardContent className="p-5">
-            <h2 className="text-sm font-semibold">Répartition des paiements</h2>
+            <h2 className="text-sm font-semibold">{copy.group.paymentsSplit}</h2>
             <p className="mb-4 mt-0.5 text-xs text-muted-foreground">
-              Qui a avancé combien dans le groupe.
+              {copy.group.paymentsSplitDesc}
             </p>
             <PaymentsChart data={ledger.contributions} />
           </CardContent>
@@ -231,10 +230,10 @@ export function GroupLedger({
       <Card>
         <CardContent className="p-5">
           <div className="flex items-center justify-between">
-            <h2 className="text-sm font-semibold">Dépenses</h2>
+            <h2 className="text-sm font-semibold">{copy.group.expenses}</h2>
             <Button size="sm" onClick={() => setShowAdd((v) => !v)}>
               {showAdd ? <X className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
-              {showAdd ? "Annuler" : "Ajouter"}
+              {showAdd ? copy.common.cancel : copy.common.add}
             </Button>
           </div>
 
@@ -242,16 +241,16 @@ export function GroupLedger({
             <div className="mt-4 space-y-3 rounded-lg border bg-muted/20 p-4">
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="space-y-1.5">
-                  <Label htmlFor="se-label">Libellé</Label>
+                  <Label htmlFor="se-label">{copy.group.label}</Label>
                   <Input
                     id="se-label"
                     value={label}
                     onChange={(e) => setLabel(e.target.value)}
-                    placeholder="Courses, restau…"
+                    placeholder={copy.group.labelPlaceholder}
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="se-amount">Montant (€)</Label>
+                  <Label htmlFor="se-amount">{copy.group.amount}</Label>
                   <Input
                     id="se-amount"
                     value={amount}
@@ -261,7 +260,7 @@ export function GroupLedger({
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="se-date">Date</Label>
+                  <Label htmlFor="se-date">{copy.group.date}</Label>
                   <Input
                     id="se-date"
                     type="date"
@@ -270,7 +269,7 @@ export function GroupLedger({
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label>Payé par</Label>
+                  <Label>{copy.group.paidBy}</Label>
                   <Select value={paidBy} onValueChange={setPaidBy}>
                     <SelectTrigger>
                       <SelectValue />
@@ -278,7 +277,7 @@ export function GroupLedger({
                     <SelectContent>
                       {ledger.members.map((m) => (
                         <SelectItem key={m.userId} value={m.userId}>
-                          {m.userId === ledger.currentUserId ? "Moi" : m.name}
+                          {m.userId === ledger.currentUserId ? copy.group.me : m.name}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -288,7 +287,7 @@ export function GroupLedger({
 
               {/* Répartition */}
               <div className="space-y-1.5">
-                <Label>Répartition</Label>
+                <Label>{copy.group.split}</Label>
                 <div className="flex gap-2">
                   <Button
                     type="button"
@@ -296,7 +295,7 @@ export function GroupLedger({
                     variant={splitType === "equal" ? "default" : "outline"}
                     onClick={() => setSplitType("equal")}
                   >
-                    Égale{equalHint ? ` (${equalHint}/pers.)` : ""}
+                    {copy.group.equal}{equalHint ? ` (${equalHint}${copy.group.perPerson})` : ""}
                   </Button>
                   <Button
                     type="button"
@@ -304,7 +303,7 @@ export function GroupLedger({
                     variant={splitType === "custom" ? "default" : "outline"}
                     onClick={() => setSplitType("custom")}
                   >
-                    Personnalisée
+                    {copy.group.custom}
                   </Button>
                 </div>
               </div>
@@ -314,7 +313,7 @@ export function GroupLedger({
                   {ledger.members.map((m) => (
                     <div key={m.userId} className="flex items-center gap-2">
                       <span className="min-w-0 flex-1 truncate text-sm">
-                        {m.userId === ledger.currentUserId ? "Moi" : m.name}
+                        {m.userId === ledger.currentUserId ? copy.group.me : m.name}
                       </span>
                       <Input
                         value={customShares[m.userId] ?? ""}
@@ -331,7 +330,7 @@ export function GroupLedger({
                     </div>
                   ))}
                   <p className="text-xs text-muted-foreground">
-                    La somme des parts doit égaler le montant total.
+                    {copy.group.invalidSplit}
                   </p>
                 </div>
               )}
@@ -346,7 +345,7 @@ export function GroupLedger({
                 ) : (
                   <Check className="h-4 w-4" />
                 )}
-                Enregistrer la dépense
+                {copy.group.saveExpense}
               </Button>
             </div>
           )}
@@ -354,7 +353,7 @@ export function GroupLedger({
           {/* Liste des dépenses */}
           {ledger.expenses.length === 0 ? (
             <p className="mt-4 text-sm text-muted-foreground">
-              Aucune dépense partagée pour l'instant.
+              {copy.group.noExpense}
             </p>
           ) : (
             <ul className="mt-4 divide-y">
@@ -363,10 +362,10 @@ export function GroupLedger({
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium">{e.label}</p>
                     <p className="text-xs text-muted-foreground">
-                      {new Date(e.date).toLocaleDateString("fr-FR")} · payé par{" "}
-                      {e.paidBy === ledger.currentUserId ? "moi" : e.paidByName}
+                      {new Date(e.date).toLocaleDateString(locale === "fr" ? "fr-FR" : locale === "uk" ? "uk-UA" : "en-GB")} {copy.group.paidByInline}{" "}
+                      {e.paidBy === ledger.currentUserId ? copy.group.meLower : e.paidByName}
                       {e.yourShare > 0
-                        ? ` · ma part ${formatEUR(e.yourShare)}`
+                        ? ` ${copy.group.myShare(formatEUR(e.yourShare))}`
                         : ""}
                     </p>
                   </div>
@@ -377,7 +376,7 @@ export function GroupLedger({
                     onClick={() => remove(e.id)}
                     disabled={busy !== null}
                     className="shrink-0 text-muted-foreground transition-colors hover:text-red-500"
-                    aria-label="Supprimer"
+                    aria-label={copy.common.delete}
                   >
                     {busy === `del-${e.id}` ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
@@ -396,9 +395,9 @@ export function GroupLedger({
       {ledger.settlements.length > 0 && (
         <Card>
           <CardContent className="p-5">
-            <h2 className="text-sm font-semibold">Règlements</h2>
+            <h2 className="text-sm font-semibold">{copy.group.settlements}</h2>
             <p className="mt-0.5 text-xs text-muted-foreground">
-              Historique de confiance : payé, confirmé ou contesté.
+              {copy.group.settlementsDesc}
             </p>
             <ul className="mt-3 divide-y">
               {ledger.settlements.map((s) => (
@@ -414,7 +413,7 @@ export function GroupLedger({
                     </p>
                     <p className="mt-0.5 text-xs text-muted-foreground">
                       {formatEUR(s.amount)} ·{" "}
-                      {new Date(s.date).toLocaleDateString("fr-FR")}
+                      {new Date(s.date).toLocaleDateString(locale === "fr" ? "fr-FR" : locale === "uk" ? "uk-UA" : "en-GB")}
                     </p>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
@@ -424,7 +423,7 @@ export function GroupLedger({
                         SETTLEMENT_STATUS_CLASS[s.status]
                       )}
                     >
-                      {SETTLEMENT_STATUS_LABEL[s.status]}
+                      {settlementStatusLabels[s.status]}
                     </span>
                     {s.status === "paid" &&
                       (s.fromUserId === ledger.currentUserId ||
@@ -444,7 +443,7 @@ export function GroupLedger({
                               ) : (
                                 <Check className="h-4 w-4" />
                               )}
-                              Confirmer
+                              {copy.group.confirm}
                             </Button>
                           )}
                           <Button
@@ -454,7 +453,7 @@ export function GroupLedger({
                             disabled={busy !== null}
                             onClick={() => markSettlement(s.id, "disputed")}
                           >
-                            Contester
+                            {copy.group.dispute}
                           </Button>
                         </>
                       )}

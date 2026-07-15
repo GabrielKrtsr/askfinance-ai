@@ -8,6 +8,8 @@ import { Badge } from "@/components/ui/badge";
 import { shareTransactionToGroup } from "@/lib/actions/shared-expenses";
 import type { RecentTransaction } from "@/lib/data/dashboard";
 import { cn, formatEUR } from "@/lib/utils";
+import { useI18n } from "@/lib/i18n/client";
+import { dashboardCopy } from "@/lib/i18n/dashboard";
 
 // Liste des transactions récentes. Si l'utilisateur a au moins un groupe, chaque
 // dépense devient cliquable pour l'ajouter directement comme dépense partagée
@@ -19,6 +21,8 @@ export function RecentTransactions({
   items: RecentTransaction[];
   groups: { id: string; name: string }[];
 }) {
+  const { locale } = useI18n();
+  const copy = dashboardCopy[locale];
   const [busyId, setBusyId] = useState<string | null>(null);
   const [menuFor, setMenuFor] = useState<string | null>(null);
 
@@ -27,9 +31,9 @@ export function RecentTransactions({
     setMenuFor(null);
     try {
       await shareTransactionToGroup({ transactionId: id, workspaceId });
-      toast.success(`Ajouté à « ${name} »`);
+      toast.success(copy.share.added(name));
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Ajout impossible.");
+      toast.error(e instanceof Error ? e.message : copy.share.failed);
     } finally {
       setBusyId(null);
     }
@@ -43,7 +47,7 @@ export function RecentTransactions({
   if (items.length === 0) {
     return (
       <p className="px-6 py-10 text-center text-sm text-muted-foreground">
-        Aucune transaction.
+        {copy.recent.empty}
       </p>
     );
   }
@@ -62,7 +66,7 @@ export function RecentTransactions({
                   ? "cursor-pointer hover:bg-muted/40"
                   : "hover:bg-muted/40"
               )}
-              title={shareable ? "Ajouter à un groupe" : undefined}
+              title={shareable ? copy.share.title : undefined}
             >
               <span
                 className={cn(
@@ -85,7 +89,7 @@ export function RecentTransactions({
                 <p className="text-xs text-muted-foreground">
                   {tx.dateLabel}
                   {shareable && (
-                    <span className="text-primary"> · Ajouter à un groupe</span>
+                    <span className="text-primary"> {copy.recent.addGroup}</span>
                   )}
                 </p>
               </div>
@@ -111,7 +115,7 @@ export function RecentTransactions({
                 />
                 <div className="absolute right-6 top-12 z-50 w-52 overflow-hidden rounded-lg border bg-card p-1 shadow-lg">
                   <p className="px-2 py-1 text-[11px] uppercase tracking-wider text-muted-foreground">
-                    Ajouter à…
+                    {copy.recent.addTo}
                   </p>
                   {groups.map((g) => (
                     <button

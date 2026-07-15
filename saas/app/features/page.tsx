@@ -22,7 +22,8 @@ const copies = {
 } as const;
 
 export default function FeaturesPage() {
-  const copy = copies[getLocale()];
+  const locale = getLocale();
+  const copy = copies[locale];
   const groups = groupIcons.map((Icon,index) => [copy.groups[index][0],Icon,copy.groups[index][1]] as const);
   const matrix = copy.matrix.map((label,index) => [label,...availability[index]] as const);
   return (
@@ -53,7 +54,7 @@ export default function FeaturesPage() {
             {matrix.map(([label, solo, group, business]) => (
               <div key={label} className="grid grid-cols-[1.6fr_repeat(3,0.7fr)] items-center border-t border-white/10 px-4 py-4 text-sm sm:px-6">
                 <span className="text-slate-300">{label}</span>
-                {[solo, group, business].map((available, index) => <span key={index}>{available ? <Check className="h-4 w-4 text-teal" /> : <span className="text-slate-500">Non</span>}</span>)}
+                {[solo, group, business].map((available, index) => <span key={index}>{available ? <Check className="h-4 w-4 text-teal" /> : <span className="text-slate-500" aria-label={locale === "fr" ? "Non disponible" : locale === "uk" ? "Недоступно" : "Not available"}>—</span>}</span>)}
               </div>
             ))}
           </Reveal>

@@ -16,14 +16,13 @@ import {
   type RecurringResult,
 } from "@/lib/services/recurring";
 import { usePilotage } from "@/components/dashboard/pilotage-provider";
-
-const TYPE_LABEL: Record<string, string> = {
-  abonnement: "Abonnement",
-  fixe: "Charge fixe",
-  variable: "Charge variable",
-};
+import { useI18n } from "@/lib/i18n/client";
+import { dashboardCopy } from "@/lib/i18n/dashboard";
 
 export function RecurringCharges({ workspaceId }: { workspaceId: string }) {
+  const { locale } = useI18n();
+  const copy = dashboardCopy[locale].recurring;
+  const typeLabels: Record<string, string> = { abonnement: copy.subscription, fixe: copy.fixed, variable: copy.variable };
   // Dans un PilotageProvider : données partagées (un seul appel API pour la
   // page). Sinon : fetch autonome, comme avant.
   const shared = usePilotage();
@@ -47,24 +46,21 @@ export function RecurringCharges({ workspaceId }: { workspaceId: string }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Charges récurrentes</CardTitle>
-        <CardDescription>
-          Abonnements et paiements réguliers détectés automatiquement
-        </CardDescription>
+        <CardTitle>{copy.title}</CardTitle>
+        <CardDescription>{copy.description}</CardDescription>
       </CardHeader>
       <CardContent>
         {loading ? (
           <p className="py-8 text-center text-sm text-muted-foreground">
-            Analyse en cours…
+            {copy.analyzing}
           </p>
         ) : error ? (
           <p className="py-8 text-center text-sm text-muted-foreground">
-            Détection indisponible. Le serveur d'analyse est-il démarré ?
+            {copy.unavailable}
           </p>
         ) : !data || data.charges.length === 0 ? (
           <p className="py-8 text-center text-sm text-muted-foreground">
-            Aucune charge récurrente détectée. Importez plusieurs mois de
-            relevés pour activer la détection.
+            {copy.empty}
           </p>
         ) : (
           <>
@@ -81,24 +77,24 @@ export function RecurringCharges({ workspaceId }: { workspaceId: string }) {
                       </p>
                       {c.alerte === "hausse" && (
                         <span className="inline-flex shrink-0 items-center gap-0.5 text-xs font-medium text-red-500">
-                          <TrendingUp className="h-3 w-3" /> hausse
+                          <TrendingUp className="h-3 w-3" /> {copy.increase}
                         </span>
                       )}
                       {c.alerte === "doublon" && (
                         <span className="inline-flex shrink-0 items-center gap-0.5 text-xs font-medium text-amber-500">
-                          <AlertTriangle className="h-3 w-3" /> doublon
+                          <AlertTriangle className="h-3 w-3" /> {copy.duplicate}
                         </span>
                       )}
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      {TYPE_LABEL[c.type] ?? c.type} · {c.frequence}
+                      {typeLabels[c.type] ?? c.type} · {c.frequence}
                     </p>
                   </div>
                   <span className="shrink-0 text-right text-sm font-semibold tabular-nums">
                     {formatEUR(c.montant_mensuel)}
                     <span className="text-xs font-normal text-muted-foreground">
                       {" "}
-                      /mois
+                      {copy.perMonth}
                     </span>
                   </span>
                 </li>
@@ -106,7 +102,7 @@ export function RecurringCharges({ workspaceId }: { workspaceId: string }) {
             </ul>
             <div className="mt-3 flex items-center justify-between border-t pt-3 text-sm">
               <span className="text-muted-foreground">
-                Total mensuel récurrent
+                {copy.total}
               </span>
               <span className="font-bold tabular-nums">
                 {formatEUR(data.total_mensuel)}

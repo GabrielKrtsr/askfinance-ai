@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { createClient } from "@/lib/supabase/client";
+import { useI18n } from "@/lib/i18n/client";
+import { dashboardCopy } from "@/lib/i18n/dashboard";
 
 interface CompanyForm {
   legal_name: string;
@@ -26,6 +28,8 @@ const EMPTY: CompanyForm = {
 };
 
 export function CompanyProfile({ workspaceId }: { workspaceId: string }) {
+  const { locale } = useI18n();
+  const copy = dashboardCopy[locale];
   const [form, setForm] = useState<CompanyForm>(EMPTY);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -65,25 +69,25 @@ export function CompanyProfile({ workspaceId }: { workspaceId: string }) {
     );
     setSaving(false);
     if (error) {
-      toast.error("Profil entreprise non enregistré.", { description: error.message });
+      toast.error(copy.company.failed, { description: error.message });
       return;
     }
-    toast.success("Profil entreprise enregistré");
+    toast.success(copy.company.saved);
   }
 
   const fields: { key: keyof CompanyForm; label: string; placeholder: string }[] = [
-    { key: "legal_name", label: "Raison sociale", placeholder: "AskFinance SAS" },
+    { key: "legal_name", label: copy.company.legalName, placeholder: "AskFinance SAS" },
     { key: "siret", label: "SIRET", placeholder: "123 456 789 00012" },
-    { key: "vat_number", label: "N° de TVA", placeholder: "FR…" },
-    { key: "legal_form", label: "Forme juridique", placeholder: "SAS, SARL, EI…" },
-    { key: "tax_regime", label: "Régime fiscal", placeholder: "IS, IR, micro…" },
+    { key: "vat_number", label: copy.company.vatNumber, placeholder: "FR…" },
+    { key: "legal_form", label: copy.company.legalForm, placeholder: "SAS, SARL, EI…" },
+    { key: "tax_regime", label: copy.company.taxRegime, placeholder: "IS, IR, micro…" },
   ];
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2"><Building2 className="h-5 w-5 text-primary" />Profil entreprise</CardTitle>
-        <CardDescription>Ces informations personnalisent la fiscalité, la facture électronique et les conseils de Yassia.</CardDescription>
+        <CardTitle className="flex items-center gap-2"><Building2 className="h-5 w-5 text-primary" />{copy.company.title}</CardTitle>
+        <CardDescription>{copy.company.description}</CardDescription>
       </CardHeader>
       <CardContent>
         {loading ? (
@@ -96,7 +100,7 @@ export function CompanyProfile({ workspaceId }: { workspaceId: string }) {
                 <Input value={form[field.key]} placeholder={field.placeholder} onChange={(event) => setForm((current) => ({ ...current, [field.key]: event.target.value }))} />
               </label>
             ))}
-            <div className="flex items-end"><Button onClick={save} disabled={saving}><Save className="h-4 w-4" />{saving ? "Enregistrement…" : "Enregistrer"}</Button></div>
+            <div className="flex items-end"><Button onClick={save} disabled={saving}><Save className="h-4 w-4" />{saving ? copy.company.saving : copy.common.save}</Button></div>
           </div>
         )}
       </CardContent>

@@ -24,11 +24,15 @@ import {
 import { formatDateFr, formatEUR } from "@/lib/utils";
 import { getForecast, type ForecastResult } from "@/lib/services/forecast";
 import { usePilotage } from "@/components/dashboard/pilotage-provider";
+import { useI18n } from "@/lib/i18n/client";
+import { dashboardCopy } from "@/lib/i18n/dashboard";
 
 const axisAmount = (v: number) =>
   Math.abs(v) >= 1000 ? `${(v / 1000).toFixed(1)}k` : `${Math.round(v)}`;
 
 export function ForecastChart({ workspaceId }: { workspaceId: string }) {
+  const { locale } = useI18n();
+  const copy = dashboardCopy[locale].forecast;
   // Dans un PilotageProvider : données partagées (un seul appel API pour la
   // page). Sinon : fetch autonome, comme avant.
   const shared = usePilotage();
@@ -50,20 +54,18 @@ export function ForecastChart({ workspaceId }: { workspaceId: string }) {
   const error = shared ? shared.error : ownError;
 
   const message = loading
-    ? "Calcul de la prévision…"
+    ? copy.calculating
     : error
-      ? "Prévision indisponible. Le serveur d'analyse est-il démarré ?"
+      ? copy.unavailable
       : !data || data.serie.length === 0
-        ? "Pas assez d'historique pour une prévision. Importez plusieurs mois de relevés."
+        ? copy.insufficient
         : null;
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Trésorerie prévisionnelle</CardTitle>
-        <CardDescription>
-          Projection à 90 jours · récurrents, échéances fiscales, tendance
-        </CardDescription>
+        <CardTitle>{copy.title}</CardTitle>
+        <CardDescription>{copy.description}</CardDescription>
       </CardHeader>
       <CardContent>
         {message ? (
@@ -77,10 +79,10 @@ export function ForecastChart({ workspaceId }: { workspaceId: string }) {
                 <div className="mb-4 flex items-start gap-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
                   <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
                   <div>
-                    <p className="font-semibold">Risque de découvert</p>
+                    <p className="font-semibold">{copy.overdraft}</p>
                     <p>
-                      Solde négatif prévu dès le{" "}
-                      {formatDateFr(data.premier_decouvert)} · point bas estimé à{" "}
+                      {copy.negativeFrom}{" "}
+                      {formatDateFr(data.premier_decouvert)} {copy.lowPoint}{" "}
                       {formatEUR(data.solde_min)}.
                     </p>
                   </div>
@@ -134,7 +136,7 @@ export function ForecastChart({ workspaceId }: { workspaceId: string }) {
                     labelFormatter={(d) => formatDateFr(String(d))}
                     formatter={(value, name) => [
                       formatEUR(Number(value)),
-                      name === "solde" ? "Solde projeté" : "Scénario pessimiste",
+                      name === "solde" ? copy.projectedBalance : copy.pessimistic,
                     ]}
                   />
                   {/* Ligne 0 = seuil de découvert (zone de danger en dessous) */}

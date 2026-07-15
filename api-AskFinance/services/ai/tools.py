@@ -13,6 +13,10 @@ from __future__ import annotations
 from collections import defaultdict
 from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
+import os
+import re
+import unicodedata
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from services.forecast import build_forecast
 from services.receivables import inflows_for_forecast, reconcile_receivables
@@ -47,6 +51,143 @@ def _eur(value: Decimal | float | int) -> str:
     return f"{amount:,.2f} EUR".replace(",", " ").replace(".", ",")
 
 
+_PERIODS = {"current_month", "previous_month", "latest_available", "specific_month", "all_time"}
+_MONTH_NUMBERS = {
+    "janvier": 1,
+    "fevrier": 2,
+    "mars": 3,
+    "avril": 4,
+    "mai": 5,
+    "juin": 6,
+    "juillet": 7,
+    "aout": 8,
+    "septembre": 9,
+    "octobre": 10,
+    "novembre": 11,
+    "decembre": 12,
+}
+
+
+def app_today() -> date:
+    """Date métier dans le fuseau configuré, indépendante du fuseau du serveur."""
+    timezone_name = os.environ.get("APP_TIMEZONE", "Europe/Paris")
+    try:
+        return datetime.now(ZoneInfo(timezone_name)).date()
+    except ZoneInfoNotFoundError:
+        print(f"[ai] fuseau inconnu APP_TIMEZONE={timezone_name}; repli UTC", flush=True)
+        return datetime.now(ZoneInfo("UTC")).date()
+
+
+def _month_start(value: date) -> date:
+    return value.replace(day=1)
+
+
+def _next_month(value: date) -> date:
+    return date(value.year + (value.month == 12), 1 if value.month == 12 else value.month + 1, 1)
+
+
+def _parse_month(value: str | None) -> date:
+    raw = str(value or "").strip()
+    try:
+        return datetime.strptime(raw, "%Y-%m").date()
+    except ValueError:
+        normalized = unicodedata.normalize("NFKD", raw.casefold())
+        plain = "".join(char for char in normalized if not unicodedata.combining(char))
+        match = re.search(
+            r"\b(" + "|".join(_MONTH_NUMBERS) + r")\s+(20\d{2})\b",
+            plain,
+        )
+        if match:
+            return date(int(match.group(2)), _MONTH_NUMBERS[match.group(1)], 1)
+        raise ValueError("Le mois doit être fourni au format YYYY-MM ou 'mois YYYY'.")
+
+
+def _resolve_period(
+    transactions: list[dict],
+    period: str = "current_month",
+    month: str | None = None,
+    today: date | None = None,
+) -> dict:
+    """Résout les périodes relatives côté serveur, sans laisser le modèle les deviner."""
+    today = today or app_today()
+    period = str(period or "current_month")
+    if period not in _PERIODS:
+        raise ValueError(f"Période inconnue : {period}")
+
+    transaction_dates = [
+        parsed
+        for transaction in transactions
+        if (parsed := _parse_date(transaction.get("date", ""))) is not None
+    ]
+    latest_date = max(transaction_dates, default=None)
+    latest_month = latest_date.strftime("%Y-%m") if latest_date else None
+
+    if period == "all_time":
+        start = min(transaction_dates, default=None)
+        end = (max(transaction_dates) + timedelta(days=1)) if transaction_dates else None
+        label = "tout l'historique"
+        month_key = None
+    else:
+        if period == "current_month":
+            start = _month_start(today)
+        elif period == "previous_month":
+            start = _month_start(today) - timedelta(days=1)
+            start = _month_start(start)
+        elif period == "latest_available":
+            start = _month_start(latest_date) if latest_date else None
+        else:
+            start = _parse_month(month)
+        end = _next_month(start) if start else None
+        month_key = start.strftime("%Y-%m") if start else None
+        label = month_key or "aucune période disponible"
+
+    return {
+        "type": period,
+        "mois": month_key,
+        "libelle": label,
+        "date_debut": start,
+        "date_fin_exclue": end,
+        "date_du_jour": today,
+        "derniere_periode_disponible": latest_month,
+    }
+
+
+def _filter_period(transactions: list[dict], resolved: dict) -> list[dict]:
+    start = resolved["date_debut"]
+    end = resolved["date_fin_exclue"]
+    if start is None or end is None:
+        return []
+    return [
+        transaction
+        for transaction in transactions
+        if (parsed := _parse_date(transaction.get("date", ""))) is not None
+        and start <= parsed < end
+    ]
+
+
+def _period_metadata(resolved: dict, available: bool) -> dict:
+    return {
+        "date_du_jour": resolved["date_du_jour"].isoformat(),
+        "periode": resolved["libelle"],
+        "type_periode": resolved["type"],
+        "donnees_disponibles": available,
+        "derniere_periode_disponible": resolved["derniere_periode_disponible"],
+    }
+
+
+def _period_required_response(transactions: list[dict]) -> dict:
+    resolved = _resolve_period(transactions, "current_month")
+    return {
+        "date_du_jour": resolved["date_du_jour"].isoformat(),
+        "periode": None,
+        "type_periode": None,
+        "donnees_disponibles": False,
+        "derniere_periode_disponible": resolved["derniere_periode_disponible"],
+        "statut": "periode_requise",
+        "message": "Aucune période n'a été précisée. Demandez à l'utilisateur quelle période analyser.",
+    }
+
+
 def _opening_balance(user_id: str) -> Decimal:
     return sum(
         (_decimal(a.get("opening_balance")) for a in list_accounts(user_id)),
@@ -54,40 +195,55 @@ def _opening_balance(user_id: str) -> Decimal:
     )
 
 
-def _build_kpis(transactions: list[dict], opening_balance: Decimal) -> dict:
+def _build_kpis(
+    transactions: list[dict],
+    opening_balance: Decimal,
+    period: str = "current_month",
+    month: str | None = None,
+    today: date | None = None,
+) -> dict:
     dated = [(t, _parse_date(t.get("date", ""))) for t in transactions]
     dated = [(t, d) for t, d in dated if d is not None]
-    if not dated:
+    resolved = _resolve_period(transactions, period, month, today)
+    selected = [t for t in _filter_period(transactions, resolved) if not bool(t.get("is_transfer"))]
+    available = bool(selected)
+    period_end = resolved["date_fin_exclue"]
+    balance_rows = [
+        (transaction, transaction_date)
+        for transaction, transaction_date in dated
+        if period_end is None or transaction_date < period_end
+    ]
+    balance = opening_balance + sum(
+        (_decimal(transaction.get("amount")) for transaction, _ in balance_rows),
+        Decimal("0"),
+    )
+    balance_date = max((transaction_date for _, transaction_date in balance_rows), default=None)
+
+    if not available:
         return {
-            "solde_tresorerie": _eur(opening_balance),
-            "periode": "aucune transaction",
-            "revenus": _eur(0),
-            "depenses": _eur(0),
-            "marge_nette": "0,0 %",
+            **_period_metadata(resolved, False),
+            "solde_tresorerie": _eur(balance),
+            "solde_au": balance_date.isoformat() if balance_date else None,
+            "revenus": None,
+            "depenses": None,
+            "marge_nette": None,
+            "message": f"Aucune transaction disponible pour {resolved['libelle']}.",
         }
 
-    last_date = max(d for _, d in dated)
-    current = [
-        t
-        for t, d in dated
-        if d.year == last_date.year
-        and d.month == last_date.month
-        and not bool(t.get("is_transfer"))
-    ]
     revenues = sum(
-        (_decimal(t.get("amount")) for t in current if _decimal(t.get("amount")) > 0),
+        (_decimal(t.get("amount")) for t in selected if _decimal(t.get("amount")) > 0),
         Decimal("0"),
     )
     expenses = sum(
-        (abs(_decimal(t.get("amount"))) for t in current if _decimal(t.get("amount")) < 0),
+        (abs(_decimal(t.get("amount"))) for t in selected if _decimal(t.get("amount")) < 0),
         Decimal("0"),
     )
-    balance = opening_balance + sum((_decimal(t.get("amount")) for t, _ in dated), Decimal("0"))
     margin = ((revenues - expenses) / revenues * Decimal("100")) if revenues else Decimal("0")
 
     return {
+        **_period_metadata(resolved, True),
         "solde_tresorerie": _eur(balance),
-        "periode": last_date.strftime("%Y-%m"),
+        "solde_au": balance_date.isoformat() if balance_date else None,
         "revenus": _eur(revenues),
         "depenses": _eur(expenses),
         "marge_nette": f"{margin.quantize(Decimal('0.1'))} %",
@@ -110,7 +266,12 @@ def _spending_by_category(transactions: list[dict], limit: int = 8) -> list[dict
 
 def _recent_transactions(transactions: list[dict], limit: int = 12) -> list[dict]:
     rows = []
-    for transaction in transactions[:limit]:
+    ordered = sorted(
+        transactions,
+        key=lambda transaction: _parse_date(transaction.get("date", "")) or date.min,
+        reverse=True,
+    )
+    for transaction in ordered[:limit]:
         rows.append({
             "date": transaction.get("date"),
             "libelle": transaction.get("merchant"),
@@ -125,26 +286,50 @@ def _recent_transactions(transactions: list[dict], limit: int = 12) -> list[dict
 
 # --- Outils exposés au modèle (handlers : user_id injecté côté serveur) ---
 
-def get_kpis(user_id: str, **_) -> dict:
-    return _build_kpis(fetch_transactions(user_id), _opening_balance(user_id))
+def get_kpis(
+    user_id: str,
+    period: str | None = None,
+    month: str | None = None,
+    **_,
+) -> dict:
+    transactions = fetch_transactions(user_id)
+    if period is None:
+        return _period_required_response(transactions)
+    return _build_kpis(
+        transactions,
+        _opening_balance(user_id),
+        period=period,
+        month=month,
+    )
 
 
 def get_forecast(user_id: str, **_) -> dict:
     transactions = fetch_transactions(user_id)
-    horizon_end = date.today() + timedelta(days=200)
+    today = app_today()
+    transaction_dates = [
+        parsed
+        for transaction in transactions
+        if (parsed := _parse_date(transaction.get("date", ""))) is not None
+    ]
+    data_date = max(transaction_dates, default=None)
+    horizon_end = today + timedelta(days=200)
     deadlines = tax_deadlines_for_forecast(
-        transactions, fetch_tax_settings(user_id), date.today(), horizon_end
+        transactions, fetch_tax_settings(user_id), today, horizon_end
     )
     inflows = inflows_for_forecast(
-        fetch_expected_receivables(user_id), transactions, date.today(), horizon_end
+        fetch_expected_receivables(user_id), transactions, today, horizon_end
     )
     forecast = build_forecast(
         transactions,
         float(_opening_balance(user_id)),
         tax_deadlines=deadlines,
         expected_inflows=inflows,
+        today=today,
     )
     return {
+        "date_du_jour": today.isoformat(),
+        "donnees_au": data_date.isoformat() if data_date else None,
+        "donnees_anciennes": bool(data_date and (today - data_date).days > 7),
         "solde_actuel": _eur(forecast.get("solde_actuel", 0)),
         "premier_decouvert": forecast.get("premier_decouvert"),
         "solde_min_90j": _eur(forecast.get("solde_min", 0)),
@@ -160,12 +345,62 @@ def get_recurring_charges(user_id: str, **_) -> dict:
     }
 
 
-def get_spending_by_category(user_id: str, limit: int = 8, **_) -> dict:
-    return {"depenses_par_categorie": _spending_by_category(fetch_transactions(user_id), int(limit or 8))}
+def get_spending_by_category(
+    user_id: str,
+    limit: int = 8,
+    period: str | None = None,
+    month: str | None = None,
+    **_,
+) -> dict:
+    transactions = fetch_transactions(user_id)
+    if period is None:
+        return {
+            **_period_required_response(transactions),
+            "total_depenses": None,
+            "depenses_par_categorie": [],
+        }
+    resolved = _resolve_period(transactions, period, month)
+    selected = _filter_period(transactions, resolved)
+    expenses = [
+        transaction
+        for transaction in selected
+        if not bool(transaction.get("is_transfer")) and _decimal(transaction.get("amount")) < 0
+    ]
+    total = sum((abs(_decimal(transaction.get("amount"))) for transaction in expenses), Decimal("0"))
+    available = bool(expenses)
+    return {
+        **_period_metadata(resolved, available),
+        "total_depenses": _eur(total) if available else None,
+        "depenses_par_categorie": _spending_by_category(
+            expenses, max(1, min(int(limit or 8), 20))
+        ),
+        "message": None if available else f"Aucune dépense disponible pour {resolved['libelle']}.",
+    }
 
 
-def get_recent_transactions(user_id: str, limit: int = 12, **_) -> dict:
-    return {"transactions_recentes": _recent_transactions(fetch_transactions_for_ai(user_id), int(limit or 12))}
+def get_recent_transactions(
+    user_id: str,
+    limit: int = 12,
+    period: str | None = None,
+    month: str | None = None,
+    **_,
+) -> dict:
+    bounded_limit = max(1, min(int(limit or 12), 50))
+    if period is None:
+        return {
+            "periode": "dernières opérations",
+            "transactions_recentes": _recent_transactions(
+                fetch_transactions_for_ai(user_id, limit=bounded_limit), bounded_limit
+            ),
+        }
+
+    transactions = fetch_transactions(user_id)
+    resolved = _resolve_period(transactions, period, month)
+    selected = _filter_period(transactions, resolved)
+    return {
+        **_period_metadata(resolved, bool(selected)),
+        "transactions_recentes": _recent_transactions(selected, bounded_limit),
+    }
 
 
 def get_accounts(user_id: str, **_) -> dict:
@@ -177,16 +412,57 @@ def get_accounts(user_id: str, **_) -> dict:
     }
 
 
-def get_budgets(user_id: str, **_) -> dict:
+def get_budgets(
+    user_id: str,
+    period: str | None = None,
+    month: str | None = None,
+    **_,
+) -> dict:
+    transactions = fetch_transactions(user_id)
+    if period is None:
+        return {
+            **_period_required_response(transactions),
+            "budgets_configures": False,
+            "comparaisons": [],
+        }
+
+    resolved = _resolve_period(transactions, period, month)
+    rows = fetch_budgets(user_id)
+    legacy_rows = [row for row in rows if row.get("month") is None]
+    month_rows = [
+        row for row in rows if str(row.get("month") or "")[:7] == resolved["mois"]
+    ]
+    actuals: dict[str, Decimal] = defaultdict(lambda: Decimal("0"))
+    for transaction in _filter_period(transactions, resolved):
+        amount = _decimal(transaction.get("amount"))
+        if bool(transaction.get("is_transfer")) or amount >= 0:
+            continue
+        category = str(transaction.get("category") or "Non catégorisé")
+        actuals[category] += abs(amount)
+
+    comparisons = []
+    for budget in month_rows:
+        category = str(budget.get("category") or "Non catégorisé")
+        ceiling = _decimal(budget.get("amount"))
+        actual = actuals.get(category, Decimal("0"))
+        comparisons.append({
+            "categorie": category,
+            "budget_max": _eur(ceiling),
+            "depenses_reelles": _eur(actual),
+            "reste": _eur(ceiling - actual),
+            "depasse": actual > ceiling,
+        })
+
     return {
-        "budgets": [
-            {
-                "mois": b.get("month"),
-                "categorie": b.get("category"),
-                "budget": _eur(_decimal(b.get("amount"))),
-            }
-            for b in fetch_budgets(user_id)
-        ]
+        **_period_metadata(resolved, bool(month_rows)),
+        "budgets_configures": bool(month_rows),
+        "avertissement": (
+            "La migration des budgets mensuels n'est pas appliquée à certains budgets. "
+            "Ils sont exclus car leur mois ne peut pas être vérifié."
+            if legacy_rows
+            else None
+        ),
+        "comparaisons": comparisons,
     }
 
 
@@ -226,10 +502,25 @@ TOOLS: list[dict] = [
     {
         "name": "get_kpis",
         "description": (
-            "Indicateurs clés du mois en cours : solde de trésorerie, revenus, dépenses, "
-            "marge nette. À utiliser pour toute question sur la situation actuelle."
+            "Indicateurs clés pour une période explicite : solde de trésorerie, revenus, "
+            "dépenses et marge nette. Pour « ce mois-ci », utiliser current_month. "
+            "Ne jamais remplacer une période vide par latest_available sans l'accord de l'utilisateur."
         ),
-        "parameters": {"type": "object", "properties": {}, "required": []},
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "period": {
+                    "type": "string",
+                    "enum": ["current_month", "previous_month", "latest_available", "specific_month", "all_time"],
+                    "description": "Période explicitement demandée par l'utilisateur.",
+                },
+                "month": {
+                    "type": "string",
+                    "description": "Mois YYYY-MM, obligatoire uniquement avec specific_month.",
+                },
+            },
+            "required": ["period"],
+        },
         "handler": get_kpis,
     },
     {
@@ -254,28 +545,46 @@ TOOLS: list[dict] = [
     {
         "name": "get_spending_by_category",
         "description": (
-            "Dépenses agrégées par catégorie. À utiliser pour « où part mon argent », "
-            "« mes plus gros postes de dépense »."
+            "Dépenses par catégorie pour une période explicite. À utiliser pour « où part "
+            "mon argent », « mes plus gros postes de dépense ». Pour « ce mois-ci », utiliser "
+            "current_month. Ne jamais utiliser latest_available comme remplacement silencieux."
         ),
         "parameters": {
             "type": "object",
             "properties": {
-                "limit": {"type": "integer", "description": "Nombre de catégories (défaut 8)."}
+                "limit": {"type": "integer", "description": "Nombre de catégories (défaut 8)."},
+                "period": {
+                    "type": "string",
+                    "enum": ["current_month", "previous_month", "latest_available", "specific_month", "all_time"],
+                    "description": "Période explicitement demandée par l'utilisateur.",
+                },
+                "month": {
+                    "type": "string",
+                    "description": "Mois YYYY-MM, obligatoire uniquement avec specific_month.",
+                },
             },
-            "required": [],
+            "required": ["period"],
         },
         "handler": get_spending_by_category,
     },
     {
         "name": "get_recent_transactions",
         "description": (
-            "Dernières transactions de l'utilisateur. À utiliser pour « mes dernières "
-            "opérations » ou vérifier une dépense précise."
+            "Transactions de l'utilisateur. Sans période, retourne les dernières opérations. "
+            "Avec une période, retourne uniquement les opérations de cette période."
         ),
         "parameters": {
             "type": "object",
             "properties": {
-                "limit": {"type": "integer", "description": "Nombre de transactions (défaut 12)."}
+                "limit": {"type": "integer", "minimum": 1, "maximum": 50},
+                "period": {
+                    "type": "string",
+                    "enum": ["current_month", "previous_month", "latest_available", "specific_month", "all_time"],
+                },
+                "month": {
+                    "type": "string",
+                    "description": "Mois YYYY-MM, obligatoire avec specific_month.",
+                },
             },
             "required": [],
         },
@@ -289,8 +598,26 @@ TOOLS: list[dict] = [
     },
     {
         "name": "get_budgets",
-        "description": "Budgets définis par catégorie et par mois.",
-        "parameters": {"type": "object", "properties": {}, "required": []},
+        "description": (
+            "Compare, pour une période explicite, les plafonds budgétaires configurés aux "
+            "dépenses réellement calculées depuis les transactions. À utiliser uniquement "
+            "pour une question de budget, plafond, reste ou dépassement. Ne jamais l'utiliser "
+            "pour répondre simplement à « où part mon argent »."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "period": {
+                    "type": "string",
+                    "enum": ["current_month", "previous_month", "latest_available", "specific_month"],
+                },
+                "month": {
+                    "type": "string",
+                    "description": "Mois YYYY-MM, obligatoire avec specific_month.",
+                },
+            },
+            "required": ["period"],
+        },
         "handler": get_budgets,
     },
     {
@@ -346,44 +673,14 @@ def run_tool(name: str, user_id: str, arguments: dict | None = None) -> dict:
     if handler is None:
         return {"erreur": f"Outil inconnu : {name}"}
     try:
+        print(f"[ai] appel outil {name} arguments={arguments or {}}", flush=True)
         return handler(user_id, **(arguments or {}))
     except Exception as exc:  # noqa: BLE001, robustesse volontaire côté agent
         print(f"[ai] outil {name} en echec : {exc}", flush=True)
-        return {"erreur": f"L'outil {name} n'a pas pu s'exécuter."}
-
-
-def build_full_context(user_id: str, workspace_type: str = "business") -> dict:
-    """Snapshot complet (compose les outils). Sert de repli si le function-calling
-    échoue : on injecte tout le contexte en un seul appel."""
-    context = {
-        "kpis": get_kpis(user_id),
-        **get_accounts(user_id),
-        **get_spending_by_category(user_id),
-        **get_budgets(user_id),
-        "charges_recurrentes": get_recurring_charges(user_id),
-        "prevision": get_forecast(user_id),
-        **get_recent_transactions(user_id),
-    }
-    if workspace_type == "business":
-        context["encaissements"] = get_overdue_receivables(user_id)
-        context["coffre_fort_fiscal"] = get_tax_vault(user_id)
-    return context
-
-
-# --- Libellés d'étape (affichés pendant le streaming quand un outil tourne) ---
-
-TOOL_STATUS: dict[str, str] = {
-    "get_kpis": "Je consulte vos indicateurs…",
-    "get_forecast": "Je consulte votre prévision…",
-    "get_recurring_charges": "J'examine vos charges récurrentes…",
-    "get_spending_by_category": "J'analyse vos dépenses…",
-    "get_recent_transactions": "Je regarde vos dernières opérations…",
-    "get_accounts": "Je consulte vos comptes…",
-    "get_budgets": "Je consulte vos budgets…",
-    "get_overdue_receivables": "Je vérifie vos encaissements en retard…",
-    "get_tax_vault": "Je consulte votre coffre-fort fiscal…",
-}
-
-
-def tool_status_label(name: str) -> str:
-    return TOOL_STATUS.get(name, "Je consulte vos données…")
+        return {
+            "statut": "erreur_outil",
+            "outil": name,
+            "donnees_disponibles": False,
+            "erreur": f"L'outil {name} n'a pas pu s'exécuter.",
+            "consigne": "Signaler l'échec technique et proposer de réessayer. Ne pas substituer d'autres données.",
+        }

@@ -143,7 +143,7 @@ export function SettingsPanel({
               <User className="h-5 w-5" />
             </span>
             <div className="min-w-0">
-              <p className="truncate font-medium">{user.fullName || "Non renseigné"}</p>
+              <p className="truncate font-medium">{user.fullName || t("settings.notProvided")}</p>
               <p className="truncate text-muted-foreground">{user.email}</p>
             </div>
           </div>

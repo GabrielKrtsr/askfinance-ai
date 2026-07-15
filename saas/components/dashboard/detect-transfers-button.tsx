@@ -7,9 +7,13 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { detectTransfers } from "@/lib/services/transfers";
+import { useI18n } from "@/lib/i18n/client";
+import { dashboardCopy } from "@/lib/i18n/dashboard";
 
 export function DetectTransfersButton({ workspaceId }: { workspaceId: string }) {
   const router = useRouter();
+  const { locale } = useI18n();
+  const copy = dashboardCopy[locale].transfers;
   const [loading, setLoading] = useState(false);
 
   async function run() {
@@ -17,15 +21,13 @@ export function DetectTransfersButton({ workspaceId }: { workspaceId: string }) 
     try {
       const n = await detectTransfers(workspaceId);
       if (n > 0) {
-        toast.success(`${n} mouvement(s) marqué(s) comme virement interne`);
+        toast.success(copy.detected(n));
         router.refresh();
       } else {
-        toast.info("Aucun virement interne détecté");
+        toast.info(copy.none);
       }
     } catch {
-      toast.error("Détection indisponible", {
-        description: "Le serveur d'analyse est-il démarré ?",
-      });
+      toast.error(copy.failed);
     } finally {
       setLoading(false);
     }
@@ -38,7 +40,7 @@ export function DetectTransfersButton({ workspaceId }: { workspaceId: string }) 
       ) : (
         <ArrowLeftRight className="h-4 w-4" />
       )}
-      Détecter virements
+      {copy.action}
     </Button>
   );
 }

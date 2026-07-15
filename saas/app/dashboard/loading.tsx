@@ -1,9 +1,11 @@
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { getT } from "@/lib/i18n/server";
 
 export default function DashboardLoading() {
+  const { t } = getT();
   return (
-    <div className="space-y-6" role="status" aria-label="Chargement du tableau de bord">
+    <div className="space-y-6" role="status" aria-label={t("pages.loadingDashboard")}>
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="space-y-2">
           <Skeleton className="h-8 w-56" />
@@ -55,7 +57,7 @@ export default function DashboardLoading() {
           ))}
         </CardContent>
       </Card>
-      <span className="sr-only">Chargement…</span>
+      <span className="sr-only">{t("pages.loading")}</span>
     </div>
   );
 }

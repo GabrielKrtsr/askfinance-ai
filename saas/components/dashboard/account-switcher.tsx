@@ -23,6 +23,8 @@ import {
   updateAccountCurrentBalance,
 } from "@/lib/services/accounts";
 import type { AccountOption } from "@/lib/data/dashboard";
+import { useI18n } from "@/lib/i18n/client";
+import { dashboardCopy } from "@/lib/i18n/dashboard";
 
 type AccountDeletionImpact = Awaited<ReturnType<typeof getAccountDeletionImpact>>;
 
@@ -38,6 +40,8 @@ export function AccountSwitcher({
   canDelete: boolean;
 }) {
   const router = useRouter();
+  const { locale } = useI18n();
+  const copy = dashboardCopy[locale];
   const pathname = usePathname();
   const params = useSearchParams();
 
@@ -59,8 +63,8 @@ export function AccountSwitcher({
 
   const selectedLabel =
     selected === "all"
-      ? "Tous les comptes"
-      : accounts.find((account) => account.value === selected)?.label ?? "Compte";
+      ? copy.account.all
+      : accounts.find((account) => account.value === selected)?.label ?? copy.account.account;
 
   function navigate(account: string) {
     setAccountMenuOpen(false);
@@ -84,7 +88,7 @@ export function AccountSwitcher({
       navigate(account.id);
       router.refresh();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Création du compte impossible.");
+      toast.error(error instanceof Error ? error.message : copy.account.createFailed);
     } finally {
       setSaving(false);
     }
@@ -100,7 +104,7 @@ export function AccountSwitcher({
       setDeletionImpact(await getAccountDeletionImpact(account.value));
     } catch (error) {
       setDeleteTarget(null);
-      toast.error(error instanceof Error ? error.message : "Lecture du compte impossible.");
+      toast.error(error instanceof Error ? error.message : copy.account.readFailed);
     } finally {
       setLoadingImpact(false);
     }
@@ -113,7 +117,7 @@ export function AccountSwitcher({
     setDeleting(true);
     try {
       await deleteAccount(deleteTarget.value, deleteConfirmation.trim());
-      toast.success(`Compte « ${deletionImpact.name} » supprimé`);
+      toast.success(copy.account.deleted(deletionImpact.name));
       const deletedSelectedAccount = selected === deleteTarget.value;
       setDeleteTarget(null);
       setDeletionImpact(null);
@@ -121,7 +125,7 @@ export function AccountSwitcher({
       if (deletedSelectedAccount) navigate("all");
       router.refresh();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Suppression impossible.");
+      toast.error(error instanceof Error ? error.message : copy.account.deleteFailed);
     } finally {
       setDeleting(false);
     }
@@ -137,7 +141,7 @@ export function AccountSwitcher({
       setNextBalance(details.currentBalance.toFixed(2).replace(".", ","));
       setEditingBalance(true);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Lecture du solde impossible.");
+      toast.error(error instanceof Error ? error.message : copy.account.balanceReadFailed);
     } finally {
       setLoadingBalance(false);
     }
@@ -145,19 +149,19 @@ export function AccountSwitcher({
 
   async function handleBalanceUpdate() {
     const normalized = nextBalance.trim().replace(/\s/g, "").replace(",", ".");
-    if (!normalized) return toast.error("Saisissez un solde.");
+    if (!normalized) return toast.error(copy.account.enterBalance);
     const value = Number(normalized);
-    if (!Number.isFinite(value)) return toast.error("Le solde saisi n'est pas valide.");
+    if (!Number.isFinite(value)) return toast.error(copy.account.invalidBalance);
 
     setSaving(true);
     try {
       const result = await updateAccountCurrentBalance(selected, value);
       setEditingBalance(false);
       setCurrentBalance(result.currentBalance);
-      toast.success("Solde du compte mis à jour");
+      toast.success(copy.account.balanceUpdated);
       router.refresh();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Modification impossible.");
+      toast.error(error instanceof Error ? error.message : copy.account.updateFailed);
     } finally {
       setSaving(false);
     }
@@ -169,21 +173,21 @@ export function AccountSwitcher({
         <Input
           value={name}
           onChange={(event) => setName(event.target.value)}
-          placeholder="Nom du compte"
+          placeholder={copy.account.name}
           className="h-9 w-36"
         />
         <Input
           value={opening}
           onChange={(event) => setOpening(event.target.value)}
-          placeholder="Solde €"
+          placeholder={copy.account.balance}
           inputMode="decimal"
           className="h-9 w-24"
         />
         <Button size="sm" onClick={handleCreate} disabled={saving}>
-          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Créer"}
+          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : copy.common.create}
         </Button>
         <Button size="sm" variant="ghost" onClick={() => setAdding(false)}>
-          Annuler
+          {copy.common.cancel}
         </Button>
       </div>
     );
@@ -208,13 +212,13 @@ export function AccountSwitcher({
             <button
               type="button"
               className="fixed inset-0 z-40 cursor-default"
-              aria-label="Fermer la liste des comptes"
+              aria-label={copy.account.closeList}
               onClick={() => setAccountMenuOpen(false)}
             />
             <div
               className="absolute left-0 z-50 mt-1.5 w-64 overflow-hidden rounded-lg border bg-card p-1 shadow-lg"
               role="listbox"
-              aria-label="Comptes"
+              aria-label={copy.account.accounts}
             >
               <button
                 type="button"
@@ -227,7 +231,7 @@ export function AccountSwitcher({
                     : "flex w-full items-center gap-2 rounded-md px-2 py-2 text-sm transition-colors hover:bg-muted"
                 }
               >
-                <span className="min-w-0 flex-1 truncate text-left">Tous les comptes</span>
+                <span className="min-w-0 flex-1 truncate text-left">{copy.account.all}</span>
                 {selected === "all" && <Check className="h-4 w-4 shrink-0" />}
               </button>
 
@@ -260,8 +264,8 @@ export function AccountSwitcher({
                         disabled={deleting}
                         onClick={() => openDeleteDialog(account)}
                         className="mr-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground opacity-70 transition-colors hover:bg-background hover:text-red-600 hover:opacity-100 disabled:opacity-40"
-                        aria-label={`Supprimer ${account.label}`}
-                        title="Supprimer ce compte"
+                        aria-label={copy.account.deleteNamed(account.label)}
+                        title={copy.account.deleteAccount}
                       >
                         <Trash2 className="h-4 w-4" />
                       </button>
@@ -282,7 +286,7 @@ export function AccountSwitcher({
             setAccountMenuOpen(false);
             setAdding(true);
           }}
-          aria-label="Nouveau compte"
+          aria-label={copy.account.newAccount}
         >
           <Plus className="h-4 w-4" />
         </Button>
@@ -294,8 +298,8 @@ export function AccountSwitcher({
           size="sm"
           disabled={loadingBalance || selected === "all"}
           onClick={openBalanceEditor}
-          aria-label="Modifier le solde du compte sélectionné"
-          title={selected === "all" ? "Sélectionnez un compte à modifier" : "Modifier le solde du compte"}
+          aria-label={copy.account.editSelectedBalance}
+          title={selected === "all" ? copy.account.selectToEdit : copy.account.editBalance}
         >
           {loadingBalance ? (
             <Loader2 className="h-4 w-4 animate-spin" />
@@ -310,7 +314,7 @@ export function AccountSwitcher({
           <button
             type="button"
             className="absolute inset-0 bg-black/50"
-            aria-label="Fermer"
+            aria-label={copy.common.close}
             onClick={() => !deleting && setDeleteTarget(null)}
           />
           <div className="relative z-10 w-full max-w-md rounded-xl border bg-card p-6 shadow-xl">
@@ -323,28 +327,27 @@ export function AccountSwitcher({
                 disabled={deleting}
                 onClick={() => setDeleteTarget(null)}
                 className="text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
-                aria-label="Fermer"
+                aria-label={copy.common.close}
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
 
-            <h2 className="mt-5 text-xl font-bold tracking-tight">Supprimer ce compte ?</h2>
+            <h2 className="mt-5 text-xl font-bold tracking-tight">{copy.account.deleteTitle}</h2>
 
             {loadingImpact ? (
               <div className="mt-5 flex items-center gap-2 text-sm text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" />
-                Calcul des données concernées…
+                {copy.account.calculating}
               </div>
             ) : deletionImpact ? (
               <>
                 <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                  Le compte « {deletionImpact.name} », ses {deletionImpact.transactions} transaction(s)
-                  et ses {deletionImpact.imports} import(s) seront définitivement supprimés.
+                  {copy.account.deleteImpact(deletionImpact.name, deletionImpact.transactions, deletionImpact.imports)}
                 </p>
                 <div className="mt-5 space-y-2">
                   <label htmlFor="account-delete-confirmation" className="text-sm font-medium">
-                    Saisissez <strong>{deletionImpact.name}</strong> pour confirmer
+                    {copy.account.typeToConfirm.replace("{name}", deletionImpact.name)}
                   </label>
                   <Input
                     id="account-delete-confirmation"
@@ -367,7 +370,7 @@ export function AccountSwitcher({
 
             <div className="mt-6 flex justify-end gap-2">
               <Button variant="ghost" disabled={deleting} onClick={() => setDeleteTarget(null)}>
-                Annuler
+                {copy.common.cancel}
               </Button>
               <Button
                 variant="destructive"
@@ -384,7 +387,7 @@ export function AccountSwitcher({
                 ) : (
                   <Trash2 className="h-4 w-4" />
                 )}
-                Supprimer définitivement
+                {copy.account.deleteForever}
               </Button>
             </div>
           </div>
@@ -396,13 +399,13 @@ export function AccountSwitcher({
           <button
             type="button"
             className="absolute inset-0 bg-black/50"
-            aria-label="Fermer"
+            aria-label={copy.common.close}
             onClick={() => !saving && setEditingBalance(false)}
           />
           <div className="relative z-10 w-full max-w-md rounded-xl border bg-card p-6 shadow-xl">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <h2 className="text-lg font-bold">Ajuster le solde</h2>
+                <h2 className="text-lg font-bold">{copy.account.adjustBalance}</h2>
                 <p className="mt-1 text-sm text-muted-foreground">{balanceAccountName}</p>
               </div>
               <button
@@ -410,16 +413,16 @@ export function AccountSwitcher({
                 onClick={() => setEditingBalance(false)}
                 disabled={saving}
                 className="text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
-                aria-label="Fermer"
+                aria-label={copy.common.close}
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
 
             <div className="mt-5 rounded-lg bg-muted/60 p-4 text-sm text-muted-foreground">
-              Solde calculé actuellement :{" "}
+              {copy.account.calculatedBalance}{" "}
               <strong className="text-foreground">
-                {currentBalance?.toLocaleString("fr-FR", {
+                {currentBalance?.toLocaleString(locale === "fr" ? "fr-FR" : locale === "uk" ? "uk-UA" : "en-GB", {
                   style: "currency",
                   currency: "EUR",
                 })}
@@ -428,7 +431,7 @@ export function AccountSwitcher({
 
             <div className="mt-5 space-y-2">
               <label htmlFor="account-current-balance" className="text-sm font-medium">
-                Solde réellement affiché par votre banque
+                {copy.account.bankBalance}
               </label>
               <div className="relative">
                 <Input
@@ -447,18 +450,17 @@ export function AccountSwitcher({
                 </span>
               </div>
               <p className="text-xs leading-5 text-muted-foreground">
-                Les transactions restent intactes. AskFinance recalcule uniquement le point de départ
-                du compte.
+                {copy.account.balanceHint}
               </p>
             </div>
 
             <div className="mt-6 flex justify-end gap-2">
               <Button variant="ghost" disabled={saving} onClick={() => setEditingBalance(false)}>
-                Annuler
+                {copy.common.cancel}
               </Button>
               <Button disabled={saving || !nextBalance.trim()} onClick={handleBalanceUpdate}>
                 {saving && <Loader2 className="h-4 w-4 animate-spin" />}
-                Enregistrer le solde
+                {copy.account.saveBalance}
               </Button>
             </div>
           </div>

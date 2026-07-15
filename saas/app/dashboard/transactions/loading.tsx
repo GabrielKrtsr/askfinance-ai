@@ -1,9 +1,11 @@
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { getT } from "@/lib/i18n/server";
 
 export default function TransactionsLoading() {
+  const { t } = getT();
   return (
-    <div className="space-y-6" role="status" aria-label="Chargement des transactions">
+    <div className="space-y-6" role="status" aria-label={t("pages.loadingTransactions")}>
       <div className="space-y-2">
         <Skeleton className="h-8 w-48" />
         <Skeleton className="h-4 w-80 max-w-full" />
@@ -56,7 +58,7 @@ export default function TransactionsLoading() {
           ))}
         </CardContent>
       </Card>
-      <span className="sr-only">Chargement…</span>
+      <span className="sr-only">{t("pages.loading")}</span>
     </div>
   );
 }

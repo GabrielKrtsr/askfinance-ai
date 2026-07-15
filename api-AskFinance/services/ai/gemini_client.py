@@ -75,14 +75,7 @@ def function_result_item(call_id: str, name: str, result_text: str) -> dict:
 
 
 def history_item(role: str, content: str) -> dict:
-    """Tour passé réinjecté dans l'historique (mode stateless).
-
-    user      -> `user_input`
-    assistant -> `model_output` (forme symétrique au tour utilisateur).
-    NB : la forme exacte de `model_output` réinjecté est à confirmer dans l'API
-    reference si l'appel live échoue. C'est le seul point non vérifié, et il est
-    isolé ici.
-    """
+    """Tour passé réinjecté dans l'historique stateless."""
     item_type = "model_output" if role == "assistant" else "user_input"
     return {"type": item_type, "content": [{"type": "text", "text": content}]}
 
@@ -163,7 +156,10 @@ def _call_model(
     return {
         "text": text,
         "function_calls": function_calls,
-        "interaction_id": payload.get("id"),
+        # En mode stateless, les étapes produites doivent être renvoyées avec les
+        # résultats d'outils au tour suivant. Supabase reste l'unique mémoire de
+        # conversation durable d'AskFinance.
+        "steps": payload.get("steps", []) or [],
     }
 
 
@@ -171,11 +167,10 @@ def run_interaction(
     system_instruction: str,
     input_items: list[dict],
     tools: list[dict] | None = None,
-    previous_interaction_id: str | None = None,
 ) -> dict:
     """Appel bas niveau à l'Interactions API, avec modèle principal puis fallbacks.
 
-    Renvoie : {"text": str, "function_calls": list, "interaction_id": str | None}.
+    Renvoie : {"text": str, "function_calls": list, "steps": list}.
     """
     api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
@@ -194,12 +189,12 @@ def run_interaction(
             "thinking_level": "low",
             "tool_choice": "auto",
         },
-        "store": True,  # active previous_interaction_id (état serveur entre les tours)
+        # Les échanges financiers sont déjà stockés dans Supabase. On évite une
+        # seconde mémoire de conversation chez Gemini.
+        "store": False,
     }
     if tools:
         body["tools"] = tools
-    if previous_interaction_id:
-        body["previous_interaction_id"] = previous_interaction_id
 
     # Budget global : chaque tentative reçoit au plus le temps restant, et on
     # arrête la cascade quand il est épuisé (au lieu de 45 s × nb de modèles).
@@ -231,118 +226,3 @@ def run_interaction(
 def generate_text(system_instruction: str, user_input: str) -> str:
     """Raccourci : une question, une réponse texte, sans outil."""
     return run_interaction(system_instruction, [user_input_item(user_input)])["text"]
-
-
-# --- Streaming (SSE) ---
-
-def _translate_stream_event(event_type: str | None, data: dict) -> list[dict]:
-    """Traduit un événement SSE de l'Interactions API en événement interne."""
-    if event_type == "interaction.created":
-        iid = (data.get("interaction") or {}).get("id")
-        return [{"kind": "interaction_id", "id": iid}] if iid else []
-    if event_type == "step.start":
-        step = data.get("step") or {}
-        if step.get("type") == "function_call":
-            args = step.get("arguments")
-            if isinstance(args, str):
-                try:
-                    args = json.loads(args)
-                except json.JSONDecodeError:
-                    args = {}
-            return [{
-                "kind": "function_call",
-                "id": step.get("id"),
-                "name": step.get("name"),
-                "arguments": args or {},
-            }]
-        return [{"kind": "step_start", "step_type": step.get("type")}]
-    if event_type == "step.delta":
-        delta = data.get("delta") or {}
-        if delta.get("type") == "text" and isinstance(delta.get("text"), str):
-            return [{"kind": "text", "text": delta["text"]}]
-        return []
-    if event_type == "interaction.completed":
-        status = (data.get("interaction") or {}).get("status")
-        return [{"kind": "status", "status": status}]
-    if event_type == "error":
-        err = data.get("error") or {}
-        return [{"kind": "error", "message": err.get("message", "Erreur Gemini"), "code": err.get("code")}]
-    return []
-
-
-def stream_interaction(
-    system_instruction: str,
-    input_items: list[dict],
-    tools: list[dict] | None = None,
-    previous_interaction_id: str | None = None,
-):
-    """Version streaming de run_interaction. Générateur d'événements internes :
-    interaction_id / step_start / function_call / text / status / error / done.
-    Pas de fallback de modèle (on ne change pas de modèle en plein flux)."""
-    api_key = os.environ.get("GEMINI_API_KEY")
-    if not api_key:
-        yield {"kind": "error", "message": "GEMINI_API_KEY est manquante dans l'environnement API."}
-        return
-
-    endpoint = os.environ.get(
-        "GEMINI_API_URL",
-        "https://generativelanguage.googleapis.com/v1beta/interactions",
-    )
-
-    body: dict = {
-        "model": _model_candidates()[0],
-        "system_instruction": system_instruction,
-        "input": input_items,
-        "generation_config": {
-            "temperature": 0.35,
-            "thinking_level": "low",
-            "tool_choice": "auto",
-        },
-        "store": True,
-        "stream": True,
-    }
-    if tools:
-        body["tools"] = tools
-    if previous_interaction_id:
-        body["previous_interaction_id"] = previous_interaction_id
-
-    event_name: str | None = None
-    try:
-        # Même client partagé que le non-streaming (connexions réutilisées) ;
-        # read=120 s s'applique entre deux chunks SSE, pas au flux entier.
-        with _http_client().stream(
-            "POST",
-            endpoint,
-            json=body,
-            headers={"x-goog-api-key": api_key},
-            timeout=httpx.Timeout(120.0, connect=_CONNECT_TIMEOUT_SECONDS),
-        ) as response:
-            if response.status_code >= 400:
-                detail = response.read().decode("utf-8", errors="replace")
-                yield {
-                    "kind": "error",
-                    "message": f"Gemini HTTP {response.status_code}: {detail}",
-                }
-                return
-
-            for raw in response.iter_lines():
-                line = raw.rstrip("\r\n")
-                if not line:
-                    continue
-                if line.startswith("event:"):
-                    event_name = line[6:].strip()
-                elif line.startswith("data:"):
-                    payload = line[5:].strip()
-                    if payload == "[DONE]":
-                        yield {"kind": "done"}
-                        continue
-                    try:
-                        data = json.loads(payload)
-                    except json.JSONDecodeError:
-                        continue
-                    event_type = data.get("event_type") or event_name
-                    for event in _translate_stream_event(event_type, data):
-                        yield event
-    except httpx.HTTPError as exc:
-        yield {"kind": "error", "message": f"Appel Gemini impossible: {exc}"}
-        return

@@ -33,6 +33,8 @@ import type {
 } from "@/lib/data/transactions";
 import { ShareToGroupButton } from "@/components/dashboard/share-to-group";
 import { updateTransactionCategory } from "@/lib/actions/transaction-categories";
+import { useI18n } from "@/lib/i18n/client";
+import { dashboardCopy } from "@/lib/i18n/dashboard";
 
 interface TransactionsTableProps {
   transactions: TransactionRow[];
@@ -104,6 +106,8 @@ export function TransactionsTable({
   groups = [],
 }: TransactionsTableProps) {
   const router = useRouter();
+  const { locale } = useI18n();
+  const copy = dashboardCopy[locale].transactions;
   const pathname = usePathname();
   const [isPending, startTransition] = useTransition();
   const [query, setQuery] = useState(filters.query ?? "");
@@ -125,13 +129,13 @@ export function TransactionsTable({
       });
       toast.success(
         applyCategoryRule
-          ? "Catégorie enregistrée et règle créée"
-          : "Catégorie enregistrée"
+          ? copy.savedRule
+          : copy.saved
       );
       setEditingCategoryId(null);
       router.refresh();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Modification impossible.");
+      toast.error(error instanceof Error ? error.message : copy.updateFailed);
     } finally {
       setSavingCategory(false);
     }
@@ -169,15 +173,14 @@ export function TransactionsTable({
     <div className="space-y-6">
       {/* Nombre de résultats (le titre de page est fourni par la page parente) */}
       <p className="text-sm text-muted-foreground">
-        {total} transaction{total > 1 ? "s" : ""} trouvée{total > 1 ? "s" : ""}
-        {isPending ? " · Actualisation…" : ""}
+        {copy.results(total)} {isPending ? copy.refreshing : ""}
       </p>
 
       {/* Récap */}
       <div className="grid gap-4 sm:grid-cols-3">
         <Card>
           <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground">Entrées</p>
+            <p className="text-xs text-muted-foreground">{copy.incoming}</p>
             <p className="mt-1 text-xl font-bold text-emerald-600">
               +{formatEUR(totalIn)}
             </p>
@@ -185,13 +188,13 @@ export function TransactionsTable({
         </Card>
         <Card>
           <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground">Sorties</p>
+            <p className="text-xs text-muted-foreground">{copy.outgoing}</p>
             <p className="mt-1 text-xl font-bold">{formatEUR(totalOut)}</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground">Solde net</p>
+            <p className="text-xs text-muted-foreground">{copy.net}</p>
             <p
               className={cn(
                 "mt-1 text-xl font-bold",
@@ -212,7 +215,7 @@ export function TransactionsTable({
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Rechercher un bénéficiaire…"
+              placeholder={copy.search}
               className="h-10 w-full rounded-lg border border-input bg-background pl-9 pr-3 text-sm outline-none focus:ring-2 focus:ring-ring"
             />
           </div>
@@ -223,10 +226,10 @@ export function TransactionsTable({
             >
               <SelectTrigger className="w-[180px]">
                 <SlidersHorizontal className="mr-2 h-4 w-4 text-muted-foreground" />
-                <SelectValue placeholder="Catégorie" />
+                <SelectValue placeholder={copy.category} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">Toutes catégories</SelectItem>
+                <SelectItem value="all">{copy.allCategories}</SelectItem>
                 {categories.map((c) => (
                   <SelectItem key={c} value={c}>
                     {c}
@@ -239,12 +242,12 @@ export function TransactionsTable({
               onValueChange={(value) => updateParams({ type: value === "all" ? undefined : value })}
             >
               <SelectTrigger className="w-[140px]">
-                <SelectValue placeholder="Type" />
+                <SelectValue placeholder={copy.type} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">Tous les types</SelectItem>
-                <SelectItem value="credit">Entrées</SelectItem>
-                <SelectItem value="debit">Sorties</SelectItem>
+                <SelectItem value="all">{copy.allTypes}</SelectItem>
+                <SelectItem value="credit">{copy.incoming}</SelectItem>
+                <SelectItem value="debit">{copy.outgoing}</SelectItem>
               </SelectContent>
             </Select>
             <div className="flex items-center gap-1.5">
@@ -252,7 +255,7 @@ export function TransactionsTable({
                 type="date"
                 value={filters.from ?? ""}
                 onChange={(e) => updateParams({ from: e.target.value || undefined })}
-                aria-label="Date de début"
+                aria-label={copy.startDate}
                 className="h-10 rounded-lg border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
               />
               <span className="text-sm text-muted-foreground">→</span>
@@ -260,7 +263,7 @@ export function TransactionsTable({
                 type="date"
                 value={filters.to ?? ""}
                 onChange={(e) => updateParams({ to: e.target.value || undefined })}
-                aria-label="Date de fin"
+                aria-label={copy.endDate}
                 className="h-10 rounded-lg border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
               />
             </div>
@@ -272,7 +275,7 @@ export function TransactionsTable({
                   updateParams({ from: undefined, to: undefined });
                 }}
               >
-                Réinitialiser
+                {copy.reset}
               </Button>
             )}
           </div>
@@ -285,14 +288,14 @@ export function TransactionsTable({
           {/* En-tête desktop */}
           <div className="hidden grid-cols-[1fr_auto_auto_auto] gap-4 border-b px-6 py-3 text-xs font-medium text-muted-foreground md:grid">
             <SortHeader
-              label="Bénéficiaire"
+              label={copy.merchant}
               column="merchant"
               sortKey={sortKey}
               sortDir={sortDir}
               onSort={toggleSort}
             />
             <SortHeader
-              label="Catégorie"
+              label={copy.category}
               column="category"
               sortKey={sortKey}
               sortDir={sortDir}
@@ -300,10 +303,10 @@ export function TransactionsTable({
               className="w-40"
             />
             <div className="w-28 uppercase tracking-wider">
-              {groups.length > 0 ? "Groupe" : ""}
+              {groups.length > 0 ? copy.group : ""}
             </div>
             <SortHeader
-              label="Montant"
+              label={copy.amount}
               column="amount"
               sortKey={sortKey}
               sortDir={sortDir}
@@ -316,8 +319,8 @@ export function TransactionsTable({
           {transactions.length === 0 ? (
             <div className="px-6 py-16 text-center text-sm text-muted-foreground">
               {filters.query || filters.category || filters.type || filters.from || filters.to
-                ? "Aucune transaction ne correspond à vos filtres."
-                : "Aucune transaction. Importez un relevé depuis le tableau de bord pour commencer."}
+                ? copy.noMatch
+                : copy.empty}
             </div>
           ) : (
             <ul className="divide-y">
@@ -374,7 +377,7 @@ export function TransactionsTable({
                             checked={applyCategoryRule}
                             onChange={(event) => setApplyCategoryRule(event.target.checked)}
                           />
-                          Appliquer à ce libellé à l’avenir
+                          {copy.applyRule}
                         </label>
                       </div>
                     ) : (
@@ -386,7 +389,7 @@ export function TransactionsTable({
                           setEditedCategory(t.category);
                           setApplyCategoryRule(true);
                         }}
-                        title="Modifier la catégorie"
+                        title={copy.editCategory}
                       >
                         <Badge variant="muted">{t.category}</Badge>
                         <Pencil className="h-3 w-3 opacity-0 transition-opacity group-hover/category:opacity-60" />
@@ -423,17 +426,17 @@ export function TransactionsTable({
             disabled={page <= 1 || isPending}
             onClick={() => updateParams({ page: String(page - 1) })}
           >
-            Précédent
+            {copy.previous}
           </Button>
           <p className="text-sm text-muted-foreground">
-            Page {page} sur {pageCount}
+            {copy.page(page, pageCount)}
           </p>
           <Button
             variant="outline"
             disabled={page >= pageCount || isPending}
             onClick={() => updateParams({ page: String(page + 1) })}
           >
-            Suivant
+            {copy.next}
           </Button>
         </div>
       )}

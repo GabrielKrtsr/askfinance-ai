@@ -32,9 +32,9 @@ export default async function BudgetPage({
     <div className="space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Budget</h1>
+          <h1 className="text-2xl font-bold tracking-tight">{t("pages.budgetTitle")}</h1>
           <p className="text-sm text-muted-foreground">
-            Vos enveloppes par catégorie et leur suivi sur le mois.
+            {t("pages.budgetSubtitle")}
           </p>
         </div>
         {data.months.length > 0 && (

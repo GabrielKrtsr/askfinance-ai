@@ -32,6 +32,22 @@ const en: Messages = {
     transactionsSubtitle: "All your operations, accounts and imports.",
     settingsTitle: "Settings",
     settingsSubtitle: "Customize your AskFinance workspace.",
+    budgetTitle: "Budget",
+    budgetSubtitle: "Your category budgets and monthly tracking.",
+    forecastTitle: "Forecasts",
+    forecastSubtitle: "Anticipate your balance and upcoming expenses.",
+    expensesTitle: "Expenses",
+    expensesSubtitle: "Your expenses by category and in detail.",
+    membersTitle: "Members",
+    membersSubtitle: "Manage who can access “{name}”.",
+    membersUnavailable: "Access unavailable.",
+    sharedTitle: "Shared expenses",
+    sharedSubtitle: "Who paid for what in “{name}”.",
+    sharedUnavailable: "Shared expenses are only available in group workspaces.",
+    loadingDashboard: "Loading dashboard",
+    loadingPilotage: "Loading steering data",
+    loadingTransactions: "Loading transactions",
+    loading: "Loading…",
   },
   settings: {
     appearance: "Appearance",
@@ -46,6 +62,7 @@ const en: Messages = {
     account: "Account",
     accountDesc: "Manage your session.",
     langSaved: "Language saved",
+    notProvided: "Not provided",
   },
   dashboard: {
     greeting: "Hello 👋",
@@ -83,6 +100,7 @@ const en: Messages = {
     emptyResult: "AskFinance prepares your indicators automatically",
     emptyAction: "Import my first statement",
     emptySteps: "3 steps, then your real figures",
+    notAvailable: "N/A",
   },
 };
 

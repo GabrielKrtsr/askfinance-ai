@@ -24,6 +24,8 @@ import {
   switchWorkspace,
 } from "@/lib/actions/workspaces";
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/lib/i18n/client";
+import { dashboardCopy } from "@/lib/i18n/dashboard";
 
 type WorkspaceType = "personal" | "business" | "group";
 
@@ -47,6 +49,8 @@ export function WorkspaceSwitcher({
   current: WorkspaceItem;
 }) {
   const router = useRouter();
+  const { locale } = useI18n();
+  const copy = dashboardCopy[locale];
   const [open, setOpen] = useState(false);
   const [switching, setSwitching] = useState(false);
   const [manageTarget, setManageTarget] = useState<WorkspaceItem | null>(null);
@@ -65,7 +69,7 @@ export function WorkspaceSwitcher({
       router.push("/dashboard");
       router.refresh();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Changement d'espace impossible.");
+      toast.error(error instanceof Error ? error.message : copy.workspace.switchFailed);
     } finally {
       setSwitching(false);
     }
@@ -91,14 +95,14 @@ export function WorkspaceSwitcher({
     try {
       if (isOwner) {
         await deleteWorkspace(manageTarget.id);
-        toast.success(`Espace « ${manageTarget.name} » supprimé`);
+        toast.success(copy.workspace.deletedNamed(manageTarget.name));
       } else {
         await leaveWorkspace(manageTarget.id);
-        toast.success(`Vous avez quitté « ${manageTarget.name} »`);
+        toast.success(copy.workspace.leftNamed(manageTarget.name));
       }
       window.location.href = "/dashboard";
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Action impossible.");
+      toast.error(error instanceof Error ? error.message : copy.workspace.actionFailed);
       setManaging(false);
     }
   }
@@ -122,12 +126,12 @@ export function WorkspaceSwitcher({
           <button
             type="button"
             className="fixed inset-0 z-40 cursor-default"
-            aria-label="Fermer le sélecteur"
+            aria-label={copy.workspace.closeSelector}
             onClick={() => setOpen(false)}
           />
           <div className="absolute left-0 z-50 mt-1.5 w-72 overflow-hidden rounded-lg border bg-card p-1 shadow-lg">
             <p className="px-2 py-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-              Vos espaces
+              {copy.workspace.title}
             </p>
             {workspaces.map((workspace) => {
               const active = workspace.id === current.id;
@@ -158,8 +162,8 @@ export function WorkspaceSwitcher({
                       "mr-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground opacity-70 transition-colors hover:bg-background hover:opacity-100 disabled:opacity-40",
                       owner ? "hover:text-red-600" : "hover:text-foreground"
                     )}
-                    aria-label={owner ? `Supprimer ${workspace.name}` : `Quitter ${workspace.name}`}
-                    title={owner ? "Supprimer cet espace" : "Quitter cet espace"}
+                    aria-label={owner ? copy.workspace.deleteNamed(workspace.name) : copy.workspace.leaveNamed(workspace.name)}
+                    title={owner ? copy.workspace.deleteWorkspace : copy.workspace.leaveWorkspace}
                   >
                     {owner ? <Trash2 className="h-4 w-4" /> : <LogOut className="h-4 w-4" />}
                   </button>
@@ -173,7 +177,7 @@ export function WorkspaceSwitcher({
               className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             >
               <Plus className="h-4 w-4 shrink-0" />
-              Créer ou rejoindre un espace
+              {copy.workspace.createJoin}
             </button>
           </div>
         </>
@@ -184,7 +188,7 @@ export function WorkspaceSwitcher({
           <button
             type="button"
             className="absolute inset-0 bg-black/50"
-            aria-label="Fermer"
+            aria-label={copy.common.close}
             onClick={() => !managing && setManageTarget(null)}
           />
           <div className="relative z-10 w-full max-w-md rounded-xl border bg-card p-6 shadow-xl">
@@ -197,25 +201,25 @@ export function WorkspaceSwitcher({
                 disabled={managing}
                 onClick={() => setManageTarget(null)}
                 className="text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
-                aria-label="Fermer"
+                aria-label={copy.common.close}
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
 
             <h2 className="mt-5 text-xl font-bold tracking-tight">
-              {isDeleting ? "Supprimer cet espace ?" : "Quitter cet espace ?"}
+              {isDeleting ? copy.workspace.deleteTitle : copy.workspace.leaveTitle}
             </h2>
             <p className="mt-2 text-sm leading-6 text-muted-foreground">
               {isDeleting
-                ? `Tous les comptes, transactions, budgets et données de « ${manageTarget.name} » seront définitivement supprimés.`
-                : `Vous perdrez l'accès à « ${manageTarget.name} » et à toutes ses données.`}
+                ? copy.workspace.deleteImpact(manageTarget.name)
+                : copy.workspace.leaveImpact(manageTarget.name)}
             </p>
 
             {isDeleting && (
               <div className="mt-5 space-y-2">
                 <label htmlFor="workspace-delete-confirmation" className="text-sm font-medium">
-                  Saisissez <strong>{manageTarget.name}</strong> pour confirmer
+                  {copy.workspace.typeToConfirm.replace("{name}", manageTarget.name)}
                 </label>
                 <Input
                   id="workspace-delete-confirmation"
@@ -233,7 +237,7 @@ export function WorkspaceSwitcher({
 
             <div className="mt-6 flex justify-end gap-2">
               <Button variant="ghost" disabled={managing} onClick={() => setManageTarget(null)}>
-                Annuler
+                {copy.common.cancel}
               </Button>
               <Button
                 variant={isDeleting ? "destructive" : "default"}
@@ -241,7 +245,7 @@ export function WorkspaceSwitcher({
                 onClick={handleManagement}
               >
                 {managing ? <Loader2 className="h-4 w-4 animate-spin" /> : isDeleting ? <Trash2 className="h-4 w-4" /> : <LogOut className="h-4 w-4" />}
-                {isDeleting ? "Supprimer définitivement" : "Quitter l'espace"}
+                {isDeleting ? copy.workspace.deleteForever : copy.workspace.leave}
               </Button>
             </div>
           </div>

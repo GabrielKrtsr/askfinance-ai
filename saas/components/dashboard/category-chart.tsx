@@ -3,12 +3,15 @@
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 
 import { formatEUR } from "@/lib/utils";
+import { useI18n } from "@/lib/i18n/client";
+import { dashboardCopy } from "@/lib/i18n/dashboard";
 
 interface CategoryChartProps {
   data: { categorie: string; montant: number; couleur: string }[];
 }
 
 export function CategoryChart({ data }: CategoryChartProps) {
+  const { locale } = useI18n();
   const total = data.reduce((s, c) => s + c.montant, 0);
 
   return (
@@ -40,7 +43,7 @@ export function CategoryChart({ data }: CategoryChartProps) {
           </PieChart>
         </ResponsiveContainer>
         <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-          <span className="text-xs text-muted-foreground">Total</span>
+          <span className="text-xs text-muted-foreground">{dashboardCopy[locale].charts.total}</span>
           <span className="text-lg font-bold">{formatEUR(total)}</span>
         </div>
       </div>

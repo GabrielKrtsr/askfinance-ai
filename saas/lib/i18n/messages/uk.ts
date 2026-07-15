@@ -32,6 +32,22 @@ const uk: Messages = {
     transactionsSubtitle: "Усі ваші операції, рахунки та імпорти.",
     settingsTitle: "Налаштування",
     settingsSubtitle: "Налаштуйте свій простір AskFinance.",
+    budgetTitle: "Бюджет",
+    budgetSubtitle: "Ваші бюджети за категоріями та їхній місячний контроль.",
+    forecastTitle: "Прогнози",
+    forecastSubtitle: "Передбачайте баланс і майбутні витрати.",
+    expensesTitle: "Витрати",
+    expensesSubtitle: "Ваші витрати за категоріями та докладно.",
+    membersTitle: "Учасники",
+    membersSubtitle: "Керуйте доступом до «{name}».",
+    membersUnavailable: "Доступ недоступний.",
+    sharedTitle: "Спільні витрати",
+    sharedSubtitle: "Хто за що платив у «{name}».",
+    sharedUnavailable: "Спільні витрати доступні лише в групових просторах.",
+    loadingDashboard: "Завантаження панелі",
+    loadingPilotage: "Завантаження прогнозів",
+    loadingTransactions: "Завантаження транзакцій",
+    loading: "Завантаження…",
   },
   settings: {
     appearance: "Вигляд",
@@ -46,6 +62,7 @@ const uk: Messages = {
     account: "Обліковий запис",
     accountDesc: "Керування сеансом.",
     langSaved: "Мову збережено",
+    notProvided: "Не вказано",
   },
   dashboard: {
     greeting: "Вітаємо 👋",
@@ -83,6 +100,7 @@ const uk: Messages = {
     emptyResult: "AskFinance автоматично підготує ваші показники",
     emptyAction: "Імпортувати першу виписку",
     emptySteps: "3 кроки, а далі ваші реальні показники",
+    notAvailable: "Н/Д",
   },
 };
 

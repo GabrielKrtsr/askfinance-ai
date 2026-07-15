@@ -36,6 +36,8 @@ import {
   type TaxVault as TaxVaultData,
   type TaxSettings,
 } from "@/lib/services/tax";
+import { useI18n } from "@/lib/i18n/client";
+import { dashboardCopy } from "@/lib/i18n/dashboard";
 
 const TYPE_DOT: Record<string, string> = {
   tva: "bg-indigo-500",
@@ -45,6 +47,8 @@ const TYPE_DOT: Record<string, string> = {
 
 export function TaxVault({ workspaceId }: { workspaceId: string }) {
   const router = useRouter();
+  const { locale } = useI18n();
+  const copy = dashboardCopy[locale];
   const [vault, setVault] = useState<TaxVaultData | null>(null);
   const [settings, setSettings] = useState<TaxSettings>(DEFAULT_TAX_SETTINGS);
   const [loading, setLoading] = useState(true);
@@ -76,11 +80,11 @@ export function TaxVault({ workspaceId }: { workspaceId: string }) {
     const ok = await saveTaxSettings(workspaceId, settings);
     setSaving(false);
     if (!ok) {
-      toast.error("Impossible d'enregistrer les réglages fiscaux.");
+      toast.error(copy.tax.saveFailed);
       return;
     }
-    toast.success("Réglages enregistrés", {
-      description: "La prévision de trésorerie intègre désormais vos échéances.",
+    toast.success(copy.tax.saved, {
+      description: copy.tax.forecastUpdated,
     });
     setEditing(false);
     await load();
@@ -100,10 +104,10 @@ export function TaxVault({ workspaceId }: { workspaceId: string }) {
         <div>
           <CardTitle className="flex items-center gap-2">
             <PiggyBank className="h-5 w-5 text-primary" />
-            Coffre-fort fiscal
+            {copy.tax.title}
           </CardTitle>
           <CardDescription>
-            Ce qu'il faut mettre de côté pour la TVA, l'URSSAF et l'impôt
+            {copy.tax.description}
           </CardDescription>
         </div>
         {!loading && !error && (
@@ -113,18 +117,18 @@ export function TaxVault({ workspaceId }: { workspaceId: string }) {
             onClick={() => setEditing((v) => !v)}
           >
             <Settings2 className="h-4 w-4" />
-            Régler
+            {copy.tax.edit}
           </Button>
         )}
       </CardHeader>
       <CardContent>
         {loading ? (
           <p className="py-8 text-center text-sm text-muted-foreground">
-            Calcul des provisions…
+            {copy.tax.calculating}
           </p>
         ) : error ? (
           <p className="py-8 text-center text-sm text-muted-foreground">
-            Coffre-fort indisponible. Le serveur d'analyse est-il démarré ?
+            {copy.tax.unavailable}
           </p>
         ) : (
           <div className="space-y-4">
@@ -132,15 +136,14 @@ export function TaxVault({ workspaceId }: { workspaceId: string }) {
             {editing && (
               <div className="space-y-3 rounded-lg border bg-muted/30 p-3">
                 <p className="text-xs text-muted-foreground">
-                  Pourcentage de votre chiffre d'affaires à provisionner pour
-                  chaque poste. Demandez les bons taux à votre expert-comptable.
+                  {copy.tax.rateHint}
                 </p>
                 <div className="grid grid-cols-3 gap-2">
                   {(
                     [
-                      ["provision_tva_taux", "TVA %"],
-                      ["provision_social_taux", "URSSAF %"],
-                      ["provision_is_taux", "Impôt %"],
+                      ["provision_tva_taux", `${copy.tax.vat} %`],
+                      ["provision_social_taux", `${copy.tax.social} %`],
+                      ["provision_is_taux", `${copy.tax.incomeTax} %`],
                     ] as const
                   ).map(([field, label]) => (
                     <div key={field} className="space-y-1">
@@ -164,7 +167,7 @@ export function TaxVault({ workspaceId }: { workspaceId: string }) {
                 <div className="grid grid-cols-2 gap-2">
                   <div className="space-y-1">
                     <label className="text-xs font-medium text-muted-foreground">
-                      Périodicité TVA
+                      {copy.tax.vatFrequency}
                     </label>
                     <Select
                       value={settings.tva_periodicite}
@@ -179,16 +182,16 @@ export function TaxVault({ workspaceId }: { workspaceId: string }) {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="mensuel">Mensuelle</SelectItem>
-                        <SelectItem value="trimestriel">Trimestrielle</SelectItem>
-                        <SelectItem value="annuel">Annuelle</SelectItem>
-                        <SelectItem value="aucun">Franchise (aucune)</SelectItem>
+                        <SelectItem value="mensuel">{copy.tax.monthly}</SelectItem>
+                        <SelectItem value="trimestriel">{copy.tax.quarterly}</SelectItem>
+                        <SelectItem value="annuel">{copy.tax.yearly}</SelectItem>
+                        <SelectItem value="aucun">{copy.tax.exempt}</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
                   <div className="space-y-1">
                     <label className="text-xs font-medium text-muted-foreground">
-                      Périodicité URSSAF
+                      {copy.tax.socialFrequency}
                     </label>
                     <Select
                       value={settings.urssaf_periodicite}
@@ -204,8 +207,8 @@ export function TaxVault({ workspaceId }: { workspaceId: string }) {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="mensuel">Mensuelle</SelectItem>
-                        <SelectItem value="trimestriel">Trimestrielle</SelectItem>
+                        <SelectItem value="mensuel">{copy.tax.monthly}</SelectItem>
+                        <SelectItem value="trimestriel">{copy.tax.quarterly}</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -215,7 +218,7 @@ export function TaxVault({ workspaceId }: { workspaceId: string }) {
                     {saving ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
                     ) : (
-                      "Enregistrer"
+                      copy.common.save
                     )}
                   </Button>
                   <Button
@@ -223,7 +226,7 @@ export function TaxVault({ workspaceId }: { workspaceId: string }) {
                     variant="ghost"
                     onClick={() => setEditing(false)}
                   >
-                    Annuler
+                    {copy.common.cancel}
                   </Button>
                 </div>
               </div>
@@ -235,13 +238,11 @@ export function TaxVault({ workspaceId }: { workspaceId: string }) {
                   <PiggyBank className="h-5 w-5" />
                 </span>
                 <p className="text-sm text-muted-foreground">
-                  Définissez les % de votre CA à mettre de côté et AskFinance
-                  calcule votre provision et intègre vos échéances (TVA, URSSAF,
-                  impôt) à la prévision de trésorerie.
+                  {copy.tax.empty}
                 </p>
                 <Button size="sm" onClick={() => setEditing(true)}>
                   <Settings2 className="h-4 w-4" />
-                  Configurer
+                  {copy.common.configure}
                 </Button>
               </div>
             ) : (
@@ -250,7 +251,7 @@ export function TaxVault({ workspaceId }: { workspaceId: string }) {
                   {/* Provision mensuelle recommandée */}
                   <div className="rounded-lg bg-primary/5 p-4">
                     <p className="text-xs text-muted-foreground">
-                      À provisionner ce mois-ci
+                      {copy.tax.provision}
                     </p>
                     <p className="mt-1 text-2xl font-bold tracking-tight">
                       {formatEUR(vault.provision_mensuelle)}
@@ -266,7 +267,7 @@ export function TaxVault({ workspaceId }: { workspaceId: string }) {
                               className={`h-2 w-2 rounded-full ${TYPE_DOT[d.type]}`}
                             />
                             <span className="flex-1 text-muted-foreground">
-                              {d.poste} ({d.taux} %)
+                              {(d.type === "tva" ? copy.tax.vat : d.type === "social" ? copy.tax.social : d.type === "is" ? copy.tax.incomeTax : d.poste)} ({d.taux} %)
                             </span>
                             <span className="font-medium tabular-nums">
                               {formatEUR(d.montant_mensuel)}
@@ -282,7 +283,7 @@ export function TaxVault({ workspaceId }: { workspaceId: string }) {
                     <div>
                       <p className="mb-2 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
                         <CalendarClock className="h-3.5 w-3.5" />
-                        Prochaines échéances (estimées)
+                        {copy.tax.deadlines}
                       </p>
                       <ul className="divide-y">
                         {vault.echeances.slice(0, 5).map((e, i) => (
@@ -310,8 +311,7 @@ export function TaxVault({ workspaceId }: { workspaceId: string }) {
 
                   <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
                     <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                    Montants indicatifs, estimés sur votre CA. À valider avec
-                    votre expert-comptable.
+                    {copy.tax.disclaimer}
                   </p>
                 </>
               )

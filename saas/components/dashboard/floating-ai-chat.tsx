@@ -10,15 +10,16 @@ import {
   X,
 } from "lucide-react";
 
-import { chatSuggestions, type ChatMessage } from "@/lib/mock-data";
+import { type ChatMessage } from "@/lib/mock-data";
 import {
-  advisors,
   getConversationMessages,
   getConversations,
-  streamAiChatMessage,
+  sendAiChatMessage,
   type AdvisorId,
   type ConversationSummary,
 } from "@/lib/services/ai-chat";
+import { useI18n } from "@/lib/i18n/client";
+import { aiChatCopy } from "@/lib/i18n/ai-chat";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -196,7 +197,7 @@ function Bubble({
   );
 }
 
-// Indicateur d'attente : points animés + libellé d'étape réel (venu du streaming).
+// Indicateur d'attente pendant que le backend prépare une réponse vérifiée.
 function TypingIndicator({ label }: { label: string }) {
   return (
     <div className="flex gap-3">
@@ -226,6 +227,8 @@ export function FloatingAiChat({
   workspaceId: string;
   workspaceType: "personal" | "business";
 }) {
+  const { locale } = useI18n();
+  const copy = aiChatCopy[locale];
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
@@ -239,8 +242,8 @@ export function FloatingAiChat({
   const [awaitingFirstToken, setAwaitingFirstToken] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const suggestions = workspaceType === "personal"
-    ? ["Où part mon argent ce mois-ci ?", "Puis-je tenir mon budget jusqu’à la fin du mois ?", "Quelles charges puis-je réduire ?"]
-    : chatSuggestions;
+    ? copy.personalSuggestions
+    : copy.businessSuggestions;
 
   useEffect(() => {
     function handleOpen() {
@@ -262,6 +265,15 @@ export function FloatingAiChat({
       active = false;
     };
   }, [open, workspaceId]);
+
+  // Une conversation appartient à un seul espace. On ne conserve jamais un id
+  // ou des messages lorsqu'un autre workspace devient actif.
+  useEffect(() => {
+    setMessages([]);
+    setConversationId(null);
+    setConversations([]);
+    setError(null);
+  }, [workspaceId]);
 
   function scrollToBottom() {
     requestAnimationFrame(() => {
@@ -297,45 +309,45 @@ export function FloatingAiChat({
     setError(null);
     setIsSending(true);
     setAwaitingFirstToken(true);
-    setStepLabel(`${ASSISTANT_NAME} réfléchit…`);
+    setStepLabel(copy.thinking(ASSISTANT_NAME));
     scrollToBottom();
 
-    // Id du message assistant en cours de stream, décidé HORS du updater
-    // setMessages pour que celui-ci reste pur (sinon React StrictMode le casse).
-    let assistantId: string | null = null;
-
     try {
-      await streamAiChatMessage(trimmed, advisor, conversationId, workspaceId, {
-        onMeta: (cid) => setConversationId(cid),
-        onStep: (label) => setStepLabel(label),
-        onToken: (token) => {
-          setAwaitingFirstToken(false);
-          if (assistantId === null) {
-            const id = `a-${Date.now()}`;
-            assistantId = id;
-            setMessages((prev) => [
-              ...prev,
-              { id, role: "assistant", content: token },
-            ]);
-          } else {
-            const id = assistantId;
-            setMessages((prev) =>
-              prev.map((m) =>
-                m.id === id ? { ...m, content: m.content + token } : m
-              )
-            );
-          }
-          scrollToBottom();
-        },
-        onError: (message) => {
-          setError(message);
-          setAwaitingFirstToken(false);
-        },
-      });
+      const response = await sendAiChatMessage(
+        trimmed,
+        advisor,
+        conversationId,
+        workspaceId,
+        locale
+      );
+      setConversationId(response.conversation_id);
+      setAwaitingFirstToken(false);
+
+      // Faux streaming : la réponse complète a déjà été calculée et enregistrée
+      // côté serveur. L'animation ne peut donc jamais sauvegarder un texte partiel.
+      const assistantId = `a-${Date.now()}`;
+      setMessages((prev) => [
+        ...prev,
+        { id: assistantId, role: "assistant", content: "" },
+      ]);
+      const chunks = response.answer.match(/\S+\s*/g) ?? [response.answer];
+      for (let index = 0; index < chunks.length; index += 3) {
+        const visibleChunk = chunks.slice(index, index + 3).join("");
+        setMessages((prev) =>
+          prev.map((item) =>
+            item.id === assistantId
+              ? { ...item, content: item.content + visibleChunk }
+              : item
+          )
+        );
+        scrollToBottom();
+        await new Promise((resolve) => window.setTimeout(resolve, 24));
+      }
       refreshConversations();
     } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "Le copilote n'a pas pu répondre.";
+      const message = locale === "fr" && err instanceof Error
+        ? err.message
+        : copy.sendError;
       setError(message);
     } finally {
       setIsSending(false);
@@ -371,7 +383,7 @@ export function FloatingAiChat({
       );
       scrollToBottom();
     } catch {
-      setError("Impossible de charger cette conversation.");
+      setError(copy.loadError);
     }
   }
 
@@ -396,13 +408,13 @@ export function FloatingAiChat({
                 className="w-full justify-start gap-2"
               >
                 <MessageSquarePlus className="h-4 w-4" />
-                Nouvelle conversation
+                {copy.newConversation}
               </Button>
             </div>
             <div className="flex-1 overflow-y-auto px-2 pb-3">
               {conversations.length === 0 ? (
                 <p className="px-2 py-6 text-center text-xs text-muted-foreground">
-                  Aucune conversation enregistrée.
+                  {copy.noConversation}
                 </p>
               ) : (
                 <ul className="space-y-0.5">
@@ -417,9 +429,9 @@ export function FloatingAiChat({
                             ? "bg-background font-medium text-foreground shadow-sm"
                             : "text-muted-foreground"
                         )}
-                        title={conversation.title || "Conversation sans titre"}
+                        title={conversation.title || copy.untitledConversation}
                       >
-                        {conversation.title || "Conversation sans titre"}
+                        {conversation.title || copy.untitledConversation}
                       </button>
                     </li>
                   ))}
@@ -432,7 +444,7 @@ export function FloatingAiChat({
           {sidebarOpen ? (
             <button
               type="button"
-              aria-label="Fermer la liste des conversations"
+              aria-label={copy.closeConversationList}
               onClick={() => setSidebarOpen(false)}
               className="absolute inset-0 z-[5] bg-black/20 lg:hidden"
             />
@@ -446,8 +458,8 @@ export function FloatingAiChat({
                 size="icon"
                 type="button"
                 onClick={() => setSidebarOpen((value) => !value)}
-                aria-label="Afficher/masquer les conversations"
-                title="Conversations"
+                aria-label={copy.toggleConversations}
+                title={copy.conversations}
                 className={sidebarOpen ? "text-primary" : undefined}
               >
                 <PanelLeft className="h-4 w-4" />
@@ -456,7 +468,7 @@ export function FloatingAiChat({
               <div className="min-w-0 flex-1">
                 <h2 className="truncate text-sm font-semibold">{ASSISTANT_NAME}</h2>
                 <p className="truncate text-xs text-muted-foreground">
-                  {workspaceType === "personal" ? "Coach financier · répond à partir de vos données" : "Copilote de trésorerie · répond à partir de vos données"}
+                  {workspaceType === "personal" ? copy.personalSubtitle : copy.businessSubtitle}
                 </p>
               </div>
               <Select
@@ -465,13 +477,13 @@ export function FloatingAiChat({
               >
                 <SelectTrigger
                   className="h-9 w-[130px] text-xs"
-                  aria-label="Mode de conseil"
-                  title="Mode de conseil"
+                  aria-label={copy.advisorMode}
+                  title={copy.advisorMode}
                 >
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {advisors.map((item) => (
+                  {copy.advisors.map((item) => (
                     <SelectItem key={item.id} value={item.id}>
                       {item.label}
                     </SelectItem>
@@ -483,7 +495,7 @@ export function FloatingAiChat({
                 size="icon"
                 type="button"
                 onClick={() => setOpen(false)}
-                aria-label="Fermer le copilote"
+                aria-label={copy.closeAssistant}
               >
                 <X className="h-4 w-4" />
               </Button>
@@ -504,7 +516,7 @@ export function FloatingAiChat({
                   ))}
                   {isSending && awaitingFirstToken ? (
                     <TypingIndicator
-                      label={stepLabel ?? `${ASSISTANT_NAME} réfléchit…`}
+                      label={stepLabel ?? copy.thinking(ASSISTANT_NAME)}
                     />
                   ) : null}
                 </div>
@@ -513,12 +525,12 @@ export function FloatingAiChat({
                   <AssistantAvatar className="h-14 w-14" />
                   <div className="space-y-1.5">
                     <h3 className="text-base font-semibold">
-                      Bonjour, je suis {ASSISTANT_NAME}
+                      {copy.greeting(ASSISTANT_NAME)}
                     </h3>
                     <p className="max-w-md text-sm text-muted-foreground">
                       {workspaceType === "personal"
-                        ? "Votre coach financier personnel. Posez une question sur vos dépenses, votre budget ou vos prévisions. Je réponds à partir de vos données."
-                        : "Votre copilote de trésorerie. Posez une question sur votre trésorerie, vos dépenses ou vos prévisions. Je réponds à partir de vos données."}
+                        ? copy.personalIntroduction
+                        : copy.businessIntroduction}
                     </p>
                   </div>
                   <div className="w-full max-w-md space-y-2">
@@ -556,7 +568,7 @@ export function FloatingAiChat({
                     }
                   }}
                   rows={1}
-                  placeholder={`Écrire à ${ASSISTANT_NAME}…`}
+                  placeholder={copy.placeholder(ASSISTANT_NAME)}
                   disabled={isSending}
                   className="max-h-32 flex-1 resize-none bg-transparent px-2 py-2 text-sm outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed"
                 />
@@ -585,8 +597,8 @@ export function FloatingAiChat({
         <button
           type="button"
           onClick={openPanel}
-          aria-label={`Ouvrir ${ASSISTANT_NAME}`}
-          title={`Ouvrir ${ASSISTANT_NAME}`}
+          aria-label={copy.openAssistant(ASSISTANT_NAME)}
+          title={copy.openAssistant(ASSISTANT_NAME)}
           className="fixed bottom-4 right-4 z-50 h-14 w-14 overflow-hidden rounded-full shadow-2xl ring-1 ring-border transition-transform hover:scale-105 sm:bottom-5 sm:right-5"
         >
           <AssistantAvatar className="h-full w-full" />

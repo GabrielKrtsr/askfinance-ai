@@ -4,9 +4,9 @@ import { AlertTriangle, ArrowDownRight, ArrowUpRight, CheckCircle2, LockKeyhole,
 import { useI18n } from "@/lib/i18n/client";
 
 const copies = {
-  fr: { cards: [["Trésorerie", "+8,4 %"], ["À encaisser", "3 factures"], ["Dépenses", "+3,1 %"]], forecast: "Prévision à 90 jours", forecastText: "Flux observés et charges récurrentes", scenario: "Scénario pilotage", yassia: "Yassia prépare le point", todo: "2 éléments à traiter", positive: "Trésorerie positive" },
-  en: { cards: [["Cash", "+8.4%"], ["Receivables", "3 invoices"], ["Expenses", "+3.1%"]], forecast: "90-day forecast", forecastText: "Observed flows and recurring charges", scenario: "Management scenario", yassia: "Yassia prepares the review", todo: "2 items to handle", positive: "Positive cash position" },
-  uk: { cards: [["Кошти", "+8,4 %"], ["До отримання", "3 рахунки"], ["Витрати", "+3,1 %"]], forecast: "Прогноз на 90 днів", forecastText: "Спостережені потоки й регулярні витрати", scenario: "Сценарій керування", yassia: "Yassia готує огляд", todo: "2 пункти до розгляду", positive: "Позитивна ліквідність" },
+  fr: { cards: [["Trésorerie", "+8,4 %"], ["À encaisser", "3 factures"], ["Dépenses", "+3,1 %"]], forecast: "Prévision à 90 jours", forecastText: "Flux observés et charges récurrentes", scenario: "Scénario pilotage", yassia: "Yassia prépare le point", todo: "2 éléments à traiter", positive: "Trésorerie positive", demoAddress: "Adresse de démonstration : https://askfinance.ai/dashboard" },
+  en: { cards: [["Cash", "+8.4%"], ["Receivables", "3 invoices"], ["Expenses", "+3.1%"]], forecast: "90-day forecast", forecastText: "Observed flows and recurring charges", scenario: "Management scenario", yassia: "Yassia prepares the review", todo: "2 items to handle", positive: "Positive cash position", demoAddress: "Demo address: https://askfinance.ai/dashboard" },
+  uk: { cards: [["Кошти", "+8,4 %"], ["До отримання", "3 рахунки"], ["Витрати", "+3,1 %"]], forecast: "Прогноз на 90 днів", forecastText: "Спостережені потоки й регулярні витрати", scenario: "Сценарій керування", yassia: "Yassia готує огляд", todo: "2 пункти до розгляду", positive: "Позитивна ліквідність", demoAddress: "Демонстраційна адреса: https://askfinance.ai/dashboard" },
 } as const;
 
 export function ProductPreview() {
@@ -24,7 +24,7 @@ export function ProductPreview() {
           </div>
           <div
             className="mx-auto flex w-full max-w-lg items-center gap-2 rounded-lg border border-slate-200 bg-white/80 px-3 py-1.5 text-[11px] text-slate-500 shadow-sm shadow-slate-950/5 dark:border-white/10 dark:bg-white/[0.06] dark:text-slate-400"
-            aria-label="Adresse de démonstration : https://askfinance.ai/dashboard"
+            aria-label={copy.demoAddress}
           >
             <LockKeyhole className="h-3 w-3 shrink-0 text-emerald-600 dark:text-emerald-400" />
             <span className="min-w-0 truncate">

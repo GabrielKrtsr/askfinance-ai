@@ -187,7 +187,7 @@ export default async function DashboardPage({
                     <span className="text-muted-foreground">{kpi.hint}</span>
                   </>
                 ) : (
-                  <span className="text-muted-foreground">N/D</span>
+                  <span className="text-muted-foreground">{t("dashboard.notAvailable")}</span>
                 )}
               </div>
             </CardContent>

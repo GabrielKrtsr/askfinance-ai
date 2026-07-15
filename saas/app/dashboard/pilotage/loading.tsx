@@ -1,5 +1,6 @@
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { getT } from "@/lib/i18n/server";
 
 function WidgetSkeleton({ chart = false }: { chart?: boolean }) {
   return (
@@ -22,8 +23,9 @@ function WidgetSkeleton({ chart = false }: { chart?: boolean }) {
 }
 
 export default function PilotageLoading() {
+  const { t } = getT();
   return (
-    <div className="space-y-6" role="status" aria-label="Chargement du pilotage">
+    <div className="space-y-6" role="status" aria-label={t("pages.loadingPilotage")}>
       <div className="space-y-2">
         <Skeleton className="h-8 w-64" />
         <Skeleton className="h-4 w-96 max-w-full" />
@@ -34,7 +36,7 @@ export default function PilotageLoading() {
         <WidgetSkeleton />
         <WidgetSkeleton />
       </div>
-      <span className="sr-only">Chargement…</span>
+      <span className="sr-only">{t("pages.loading")}</span>
     </div>
   );
 }

@@ -24,6 +24,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn, formatEUR } from "@/lib/utils";
+import { useI18n } from "@/lib/i18n/client";
+import { dashboardCopy } from "@/lib/i18n/dashboard";
 
 interface Budget {
   categorie: string;
@@ -60,6 +62,8 @@ export function BudgetManager({
   canEdit = true,
 }: BudgetManagerProps) {
   const router = useRouter();
+  const { locale } = useI18n();
+  const copy = dashboardCopy[locale];
   const [adding, setAdding] = useState(false);
   const [category, setCategory] = useState("");
   const [amount, setAmount] = useState("");
@@ -75,11 +79,11 @@ export function BudgetManager({
   async function handleSave() {
     const value = Number(amount.replace(",", "."));
     if (!month) {
-      toast.error("Choisissez d'abord un mois.");
+      toast.error(copy.budget.chooseMonth);
       return;
     }
     if (!category || !Number.isFinite(value) || value <= 0) {
-      toast.error("Choisissez une catégorie et un montant valide.");
+      toast.error(copy.budget.invalidEntry);
       return;
     }
 
@@ -99,12 +103,12 @@ export function BudgetManager({
     setSaving(false);
 
     if (error) {
-      toast.error("Impossible d'enregistrer le budget", {
+      toast.error(copy.budget.saveFailed, {
         description: error.message,
       });
       return;
     }
-    toast.success("Budget enregistré");
+    toast.success(copy.budget.saved);
     setAdding(false);
     setCategory("");
     setAmount("");
@@ -115,7 +119,7 @@ export function BudgetManager({
     if (!editingCategory || !month) return;
     const value = Number(editingAmount.replace(",", "."));
     if (!Number.isFinite(value) || value <= 0) {
-      toast.error("Saisissez un montant valide.");
+      toast.error(copy.budget.invalidAmount);
       return;
     }
 
@@ -130,17 +134,17 @@ export function BudgetManager({
     setSaving(false);
 
     if (error) {
-      toast.error("Modification impossible", { description: error.message });
+      toast.error(copy.budget.updateFailed, { description: error.message });
       return;
     }
-    toast.success("Budget modifié");
+    toast.success(copy.budget.updated);
     setEditingCategory(null);
     setEditingAmount("");
     router.refresh();
   }
 
   async function handleCopyPreviousMonth() {
-    if (!month) return toast.error("Choisissez d'abord un mois.");
+    if (!month) return toast.error(copy.budget.chooseMonth);
     setCopying(true);
     const supabase = createClient();
     const previousMonth = previousMonthDate(month);
@@ -152,7 +156,7 @@ export function BudgetManager({
 
     if (error) {
       setCopying(false);
-      toast.error("Impossible de charger le mois précédent", {
+      toast.error(copy.budget.previousFailed, {
         description: error.message,
       });
       return;
@@ -170,7 +174,7 @@ export function BudgetManager({
 
     if (rows.length === 0) {
       setCopying(false);
-      toast.info("Aucun budget à reprendre du mois précédent.");
+      toast.info(copy.budget.previousEmpty);
       return;
     }
 
@@ -180,10 +184,10 @@ export function BudgetManager({
     setCopying(false);
 
     if (copyError) {
-      toast.error("Copie impossible", { description: copyError.message });
+      toast.error(copy.budget.copyFailed, { description: copyError.message });
       return;
     }
-    toast.success(`${rows.length} budget(s) repris du mois précédent`);
+    toast.success(copy.budget.copied(rows.length));
     router.refresh();
   }
 
@@ -196,10 +200,10 @@ export function BudgetManager({
       .eq("category", categorie)
       .eq("month", monthDate(month));
     if (error) {
-      toast.error("Suppression impossible", { description: error.message });
+      toast.error(copy.budget.deleteFailed, { description: error.message });
       return;
     }
-    toast.success("Budget supprimé");
+    toast.success(copy.budget.deleted);
     router.refresh();
   }
 
@@ -207,9 +211,9 @@ export function BudgetManager({
     <Card className="lg:col-span-2">
       <CardHeader className="flex-row items-center justify-between space-y-0">
         <div>
-          <CardTitle>Suivi budgétaire</CardTitle>
+          <CardTitle>{copy.budget.title}</CardTitle>
           <CardDescription>
-            Vos dépenses par rapport aux budgets de {monthLabel ?? month}
+            {copy.budget.description(monthLabel ?? month)}
           </CardDescription>
         </div>
         {canEdit && (
@@ -225,12 +229,12 @@ export function BudgetManager({
               ) : (
                 <Copy className="h-4 w-4" />
               )}
-              Reprendre le mois précédent
+              {copy.budget.copyPrevious}
             </Button>
             {!adding && (
               <Button variant="outline" size="sm" onClick={() => setAdding(true)}>
                 <Plus className="h-4 w-4" />
-                Ajouter
+                {copy.common.add}
               </Button>
             )}
           </div>
@@ -242,16 +246,16 @@ export function BudgetManager({
           <div className="flex flex-col gap-3 rounded-lg border bg-muted/30 p-3 sm:flex-row sm:items-end">
             <div className="flex-1 space-y-1">
               <label className="text-xs font-medium text-muted-foreground">
-                Catégorie
+                {copy.budget.category}
               </label>
               <Select value={category} onValueChange={setCategory}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Choisir une catégorie" />
+                  <SelectValue placeholder={copy.budget.chooseCategory} />
                 </SelectTrigger>
                 <SelectContent>
                   {available.length === 0 ? (
                     <div className="px-2 py-1.5 text-sm text-muted-foreground">
-                      Toutes vos catégories ont déjà un budget.
+                      {copy.budget.allCategorized}
                     </div>
                   ) : (
                     available.map((c) => (
@@ -265,7 +269,7 @@ export function BudgetManager({
             </div>
             <div className="space-y-1 sm:w-32">
               <label className="text-xs font-medium text-muted-foreground">
-                Budget (€)
+                {copy.budget.amount}
               </label>
               <Input
                 type="number"
@@ -280,7 +284,7 @@ export function BudgetManager({
                 {saving ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
-                  "Enregistrer"
+                  copy.common.save
                 )}
               </Button>
               <Button
@@ -288,7 +292,7 @@ export function BudgetManager({
                 variant="ghost"
                 onClick={() => setAdding(false)}
               >
-                Annuler
+                {copy.common.cancel}
               </Button>
             </div>
           </div>
@@ -314,13 +318,13 @@ export function BudgetManager({
                           inputMode="decimal"
                           value={editingAmount}
                           onChange={(event) => setEditingAmount(event.target.value)}
-                          aria-label={`Nouveau budget ${b.categorie}`}
+                          aria-label={copy.budget.newBudget(b.categorie)}
                         />
                         <button
                           onClick={handleUpdate}
                           disabled={saving}
                           className="text-emerald-600 disabled:opacity-50"
-                          aria-label={`Enregistrer le budget ${b.categorie}`}
+                          aria-label={copy.budget.saveBudget(b.categorie)}
                         >
                           {saving ? (
                             <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -331,7 +335,7 @@ export function BudgetManager({
                         <button
                           onClick={() => setEditingCategory(null)}
                           className="text-muted-foreground"
-                          aria-label="Annuler la modification"
+                          aria-label={copy.budget.cancelEdit}
                         >
                           <X className="h-3.5 w-3.5" />
                         </button>
@@ -354,14 +358,14 @@ export function BudgetManager({
                                 setEditingAmount(String(b.budget));
                               }}
                               className="text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100"
-                              aria-label={`Modifier le budget ${b.categorie}`}
+                              aria-label={copy.budget.editBudget(b.categorie)}
                             >
                               <Pencil className="h-3.5 w-3.5" />
                             </button>
                             <button
                               onClick={() => handleDelete(b.categorie)}
                               className="text-muted-foreground opacity-0 transition-opacity hover:text-red-500 group-hover:opacity-100"
-                              aria-label={`Supprimer le budget ${b.categorie}`}
+                              aria-label={copy.budget.deleteBudget(b.categorie)}
                             >
                               <X className="h-3.5 w-3.5" />
                             </button>
@@ -381,7 +385,7 @@ export function BudgetManager({
         ) : (
           !adding && (
             <p className="py-8 text-center text-sm text-muted-foreground">
-              Aucun budget défini. Cliquez sur « Ajouter » pour en créer un.
+              {copy.budget.empty}
             </p>
           )
         )}
